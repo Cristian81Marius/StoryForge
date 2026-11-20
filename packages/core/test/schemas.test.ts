@@ -45,6 +45,15 @@ describe("Storyboard", () => {
     expect(Storyboard.safeParse(sb).success).toBe(false);
   });
 
+  it("limita de cuvinte se aplică doar casetei scenelor narate, nu titlului/finalului (text SVG)", () => {
+    const long = Array.from({ length: 38 }, (_, i) => `cuvânt${i}`).join(" ");
+    const sb = fixture();
+    sb.scenes[8].caption.ro = long; // final
+    expect(Storyboard.safeParse(sb).success).toBe(true);
+    sb.scenes[3].caption.ro = long; // poveste
+    expect(Storyboard.safeParse(sb).success).toBe(false);
+  });
+
   it("prima scenă e titlul, ultima finalul", () => {
     const sb = fixture();
     sb.scenes.reverse();

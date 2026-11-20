@@ -137,8 +137,10 @@ export const Storyboard = z
         if (!ids.has(c.ref))
           ctx.addIssue({ code: "custom", path: ["scenes", i, "characters", j, "ref"], message: `personaj necunoscut: ${c.ref}` });
       });
-      const words = s.caption.ro.split(/\s+/).filter(Boolean).length;
-      if (words > 30)
+      // Limita de ~25 de cuvinte e pentru caseta de subtitrare a scenelor narate. Titlul și finalul
+      // (versetul + creditele) sunt text desenat în SVG de motor, nu casetă: nu se aplică.
+      const words = s.caption.ro.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length;
+      if ((s.role === "story" || s.role === "lesson" || s.role === "question") && words > 30)
         ctx.addIssue({ code: "custom", path: ["scenes", i, "caption", "ro"], message: `caseta are ${words} cuvinte (max ~25)` });
     });
     if (sb.scenes[0]?.role !== "title")
