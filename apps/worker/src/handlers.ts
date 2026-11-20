@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Job, PrismaClient } from "@prisma/client";
-import { mockPayload, renderAttribution, ScenaristOutput, STAGE_DEF, type Logger, type Stage } from "@storyforge/core";
+import { mockPayload, renderAttribution, ScenaristOutput, type Stage } from "@storyforge/core";
 import { saveDraftVersion } from "@storyforge/core/services";
 import { runAgent, type Exec } from "./runner";
 import { loadAgentMeta } from "./agents";
@@ -13,6 +13,7 @@ export type { HandlerCtx } from "./ctx";
 import type { HandlerCtx } from "./ctx";
 import { videoDraft, finalRender } from "./video";
 import { voiceDraft } from "./voice";
+import { socialDraft, socialSchedule, socialReschedule, socialCheck } from "./social";
 
 type JobInput = { previousVersionId?: string; feedback?: string; approvedVersionId?: string; versionId?: string };
 
@@ -102,27 +103,6 @@ async function scriptDraft(ctx: HandlerCtx) {
   });
 }
 
-/** Etapele care se implementează în fazele 3–5; până atunci rulează doar în mod mock. */
-function notYet(stage: Stage, phase: number) {
-  return async (ctx: HandlerCtx) => {
-    if (ctx.mock) return mockStage(ctx, stage);
-    throw new Error(`Etapa ${STAGE_DEF[stage].label} se implementează în faza ${phase}. Pornește workerul cu STORYFORGE_MOCK_AGENTS=1 pentru demo.`);
-  };
-}
-
-async function socialSchedule(ctx: HandlerCtx) {
-  if (!ctx.mock) throw new Error("Programarea Metricool se implementează în faza 5.");
-  const story = await loadStory(ctx);
-  const channels = await ctx.db.channel.findMany({ where: { active: true } });
-  let day = 1;
-  for (const ch of channels)
-    for (const platform of ch.platforms)
-      await ctx.db.schedule.create({
-        data: { storyId: story.id, channelId: ch.id, platform, scheduledAt: new Date(Date.now() + day++ * 86400_000), status: "MANUAL", versionId: (ctx.job.input as JobInput).versionId },
-      });
-  ctx.log.info("social.mock_scheduled", { count: day - 1 });
-}
-
 async function bookImportComori(ctx: HandlerCtx) {
   const { importId, limit } = ctx.job.input as { importId: string; limit?: number };
   try {
@@ -133,12 +113,26 @@ async function bookImportComori(ctx: HandlerCtx) {
   }
 }
 
+/** Mod demo: rânduri în calendar, toate manuale. */
+async function mockSchedule(ctx: HandlerCtx) {
+  const story = await loadStory(ctx);
+  const channels = await ctx.db.channel.findMany({ where: { active: true } });
+  let day = 1;
+  for (const ch of channels)
+    for (const platform of ch.platforms)
+      await ctx.db.schedule.create({
+        data: { storyId: story.id, channelId: ch.id, platform, lang: ch.language, scheduledAt: new Date(Date.now() + day++ * 86400_000), status: "MANUAL", versionId: (ctx.job.input as JobInput).versionId },
+      });
+}
+
 export const HANDLERS: Record<string, (ctx: HandlerCtx) => Promise<void>> = {
   "book.import.comori": bookImportComori,
   "script.draft": scriptDraft,
   "video.draft": (ctx) => (ctx.mock ? mockStage(ctx, "VIDEO") : videoDraft(ctx)),
   "voice.draft": (ctx) => (ctx.mock ? mockStage(ctx, "VOICE") : voiceDraft(ctx)),
   "final.render": (ctx) => (ctx.mock ? mockStage(ctx, "FINAL") : finalRender(ctx)),
-  "social.draft": notYet("SOCIAL", 5),
-  "social.schedule": socialSchedule,
+  "social.draft": (ctx) => (ctx.mock ? mockStage(ctx, "SOCIAL") : socialDraft(ctx)),
+  "social.reschedule": socialReschedule,
+  "social.check": socialCheck,
+  "social.schedule": (ctx) => (ctx.mock ? mockSchedule(ctx) : socialSchedule(ctx)),
 };

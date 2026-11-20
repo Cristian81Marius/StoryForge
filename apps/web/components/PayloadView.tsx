@@ -173,6 +173,7 @@ export function PayloadView({ stage, payload }: { stage: Stage; payload: unknown
               <th>Titlu</th>
               <th>Descriere</th>
               <th>Hashtag-uri</th>
+              <th>Propus</th>
             </tr>
           </thead>
           <tbody>
@@ -183,6 +184,10 @@ export function PayloadView({ stage, payload }: { stage: Stage; payload: unknown
                 <td>{p.title}</td>
                 <td style={{ whiteSpace: "pre-wrap" }}>{p.description}</td>
                 <td>{p.hashtags.join(" ")}</td>
+                <td className="muted">
+                  {p.proposedAt ? new Date(p.proposedAt).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" }) : "—"}
+                  <div>{p.madeForKids ? "made for kids" : ""} · AI</div>
+                </td>
               </tr>
             ))}
           </tbody>

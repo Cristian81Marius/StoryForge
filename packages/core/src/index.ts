@@ -8,3 +8,4 @@ export * from "./claude";
 export * from "./import";
 export * from "./mock";
 export * from "./storage";
+export * from "./social";

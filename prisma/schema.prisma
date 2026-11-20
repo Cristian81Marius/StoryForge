@@ -248,8 +248,16 @@ model Schedule {
   channel     Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   versionId   String?
   platform    String
+  lang        String    @default("ro")
   scheduledAt DateTime
   externalId  String?
+  /// uuid-ul Metricool (rămâne stabil la actualizări; id-ul se schimbă)
+  externalUuid String?
+  plannerUrl  String?
+  /// postarea trimisă (titlu, descriere, hashtag-uri, info Metricool) — pentru kitul manual și reprogramare
+  payload     Json      @default("{}")
+  /// MANUAL | API | MCP
+  mode        String    @default("MANUAL")
   /// PENDING | SCHEDULED | PUBLISHED | FAILED | MANUAL
   status      String    @default("PENDING")
   error       String?
