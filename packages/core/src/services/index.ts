@@ -170,3 +170,4 @@ export async function retryJob(db: PrismaClient, jobId: string) {
 
 export { STAGE_DEF };
 export * from "./import";
+export * from "./integrations";

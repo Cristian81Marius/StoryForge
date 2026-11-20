@@ -33,7 +33,7 @@ export interface AnimationProvider {
   /** Grilă cu cadre-cheie pentru QA rapid. Întoarce calea imaginii. */
   preview(ep: EpisodeRef, lang: Lang): Promise<string>;
   /** Video mic și rapid, fără voce, pentru aprobarea mișcării. Întoarce calea mp4. */
-  draft(ep: EpisodeRef, lang: Lang): Promise<string>;
+  draft(ep: EpisodeRef, lang: Lang, audioDir?: string): Promise<string>;
   /** Potrivește duratele după voce (faza 4). */
   fit(ep: EpisodeRef, lang: Lang, audioDir: string): Promise<string>;
   /** Randare finală 1080×1920; cu audioDir face și mixajul (voce + sunete, -14 LUFS). */

@@ -70,9 +70,9 @@ export class TrifaV2Provider implements AnimationProvider {
     return resolve(out, "preview_grid.jpg");
   }
 
-  async draft(ep: EpisodeRef, lang: Lang) {
+  async draft(ep: EpisodeRef, lang: Lang, audioDir?: string) {
     const out = this.out(ep, lang);
-    await this.run(ep, ["draft", page(ep, lang), this.rel(ep, out)], 30 * 60_000);
+    await this.run(ep, ["draft", page(ep, lang), this.rel(ep, out), ...(audioDir ? [this.rel(ep, audioDir)] : [])], 30 * 60_000);
     return resolve(out, "draft.mp4");
   }
 

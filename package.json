@@ -20,7 +20,8 @@
     "skill:verify": "tsx scripts/verify-skill.mts",
     "demo": "tsx --env-file-if-exists=.env scripts/demo-phase1.mts",
     "import:comori": "tsx --env-file-if-exists=.env scripts/import-comori.mts",
-    "render:check": "tsx --env-file-if-exists=.env scripts/render-final-check.mts"
+    "render:check": "tsx --env-file-if-exists=.env scripts/render-final-check.mts",
+    "voice:check": "tsx --env-file-if-exists=.env scripts/voice-pipeline-check.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

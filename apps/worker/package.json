@@ -9,8 +9,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@storyforge/core": "*",
     "@prisma/client": "6.19.2",
+    "@spekoai/sdk": "0.5.6",
+    "@storyforge/core": "*",
     "zod-to-json-schema": "3.24.6"
   },
   "devDependencies": {

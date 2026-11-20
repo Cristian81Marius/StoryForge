@@ -10,8 +10,9 @@
     "test:e2e": "playwright test --trace off"
   },
   "dependencies": {
-    "@storyforge/core": "*",
     "@prisma/client": "6.19.2",
+    "@spekoai/sdk": "0.5.6",
+    "@storyforge/core": "*",
     "diff": "8.0.2",
     "jose": "6.1.0",
     "next": "15.5.28",

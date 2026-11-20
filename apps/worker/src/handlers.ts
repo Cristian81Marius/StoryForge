@@ -12,6 +12,7 @@ import { runComoriImport } from "./import-comori";
 export type { HandlerCtx } from "./ctx";
 import type { HandlerCtx } from "./ctx";
 import { videoDraft, finalRender } from "./video";
+import { voiceDraft } from "./voice";
 
 type JobInput = { previousVersionId?: string; feedback?: string; approvedVersionId?: string; versionId?: string };
 
@@ -136,7 +137,7 @@ export const HANDLERS: Record<string, (ctx: HandlerCtx) => Promise<void>> = {
   "book.import.comori": bookImportComori,
   "script.draft": scriptDraft,
   "video.draft": (ctx) => (ctx.mock ? mockStage(ctx, "VIDEO") : videoDraft(ctx)),
-  "voice.draft": notYet("VOICE", 4),
+  "voice.draft": (ctx) => (ctx.mock ? mockStage(ctx, "VOICE") : voiceDraft(ctx)),
   "final.render": (ctx) => (ctx.mock ? mockStage(ctx, "FINAL") : finalRender(ctx)),
   "social.draft": notYet("SOCIAL", 5),
   "social.schedule": socialSchedule,

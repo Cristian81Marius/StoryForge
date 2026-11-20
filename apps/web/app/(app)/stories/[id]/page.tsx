@@ -8,6 +8,7 @@ import { VersionDiff } from "@/components/VersionDiff";
 import { PayloadView } from "@/components/PayloadView";
 import { fmtDate, fmtUsd, fmtInt } from "@/lib/format";
 import { retryJobAction, startAction } from "@/app/actions";
+import { uploadSceneAudioAction } from "@/app/voice-actions";
 
 type FileRef = { key: string; kind: string; lang?: string; mime?: string; url?: string };
 
@@ -31,6 +32,8 @@ export default async function StoryPage({
   if (!story) notFound();
 
   const status = story.status as StoryStatus;
+  const approvedScript = [...story.versions].reverse().find((v) => v.stage === "SCRIPT" && v.decision === "APPROVED");
+  const scriptScenes = ((approvedScript?.payload as { storyboard?: { scenes?: Array<{ narration: { ro: string; en: string } }> } })?.storyboard?.scenes ?? []);
   const currentStage = stageOfStatus(status);
   const stagesWithVersions = STAGES.filter((s) => story.versions.some((v) => v.stage === s));
   const stage = (STAGES.includes(sp.stage as Stage) ? sp.stage : (currentStage && stagesWithVersions.includes(currentStage) ? currentStage : stagesWithVersions.at(-1))) as Stage | undefined;
@@ -113,6 +116,28 @@ export default async function StoryPage({
           </div>
         </div>
       </div>
+
+      {status === "VOICE_DRAFT" && story.book.ttsProvider === "manual" && (
+        <div className="panel" data-testid="manual-audio">
+          <h2 style={{ marginTop: 0 }}>Narațiune încărcată manual</h2>
+          <p className="muted">Câte un fișier audio pe scenă (în ordinea scenelor din scenariul aprobat). După încărcare, apasă „Reîncearcă” pe jobul voice.draft.</p>
+          {(["ro", "en"] as const).map((lang) => (
+            <form key={lang} action={uploadSceneAudioAction} className="panel">
+              <input type="hidden" name="storyId" value={story.id} />
+              <input type="hidden" name="lang" value={lang} />
+              <b>{lang.toUpperCase()}</b>
+              {scriptScenes.map((sc, i) => (
+                <p key={i} className="row">
+                  <span style={{ minWidth: 40 }}>s{String(i).padStart(2, "0")}</span>
+                  <input type="file" name={`s${String(i).padStart(2, "0")}`} accept="audio/*" />
+                  <span className="muted">{sc.narration[lang].slice(0, 90)}</span>
+                </p>
+              ))}
+              <button className="small primary">Încarcă {lang.toUpperCase()}</button>
+            </form>
+          ))}
+        </div>
+      )}
 
       <h2>Versiuni pe etape</h2>
       <div className="tabs">

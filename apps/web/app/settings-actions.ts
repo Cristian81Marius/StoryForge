@@ -12,6 +12,7 @@ import { prisma } from "@/lib/db";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
 const COLOR = /^#[0-9a-f]{6}$/i;
+const MUSIC_TYPES: Record<string, string> = { "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/wav": "wav", "audio/x-wav": "wav" };
 const LOGO_TYPES: Record<string, string> = { "image/png": "png", "image/svg+xml": "svg", "image/jpeg": "jpg" };
 
 /** Template-ul outro-ului (culori, text, logo). Fonturile rămân cele ale canalului: Cinzel + Lora. */
@@ -39,6 +40,20 @@ export async function saveTemplateAction(form: FormData) {
     template.logoKey = key;
   }
   if (form.get("removeLogo") === "on") delete template.logoKey;
+  template.musicVolumeDb = Math.max(-40, Math.min(-6, Number(form.get("musicVolumeDb")) || -22));
+  const music = form.get("music");
+  if (music instanceof File && music.size > 0) {
+    const ext = MUSIC_TYPES[music.type];
+    if (!ext || music.size > 20 * 1024 * 1024) redirect("/settings?flash=" + encodeURIComponent("Muzică: MP3, M4A sau WAV, max 20 MB"));
+    const dir = mkdtempSync(join(tmpdir(), "sf-music-"));
+    const p = join(dir, `muzica.${ext}`);
+    writeFileSync(p, Buffer.from(await music.arrayBuffer()));
+    const key = `brand/muzica-${Date.now()}.${ext}`;
+    await getStorage().putFile(key, p);
+    rmSync(dir, { recursive: true, force: true });
+    template.musicKey = key;
+  }
+  if (form.get("removeMusic") === "on") delete template.musicKey;
   await prisma.settings.upsert({
     where: { id: "global" },
     update: { template: template as Prisma.InputJsonValue },

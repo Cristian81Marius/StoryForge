@@ -6,7 +6,8 @@ import type { HandlerCtx } from "./handlers";
 import { prepareEpisodeDir } from "./episode-dir";
 import { TrifaV2Provider, spawnPython } from "./animation/trifa-v2";
 import type { AnimationProvider, CheckReport, Lang } from "./animation/types";
-import { writeOutroPage, appendOutro, hasAudioStream, type OutroTemplate } from "./outro";
+import { writeOutroPage, appendOutro, hasAudioStream, probeDuration, type OutroTemplate } from "./outro";
+import { addBackgroundMusic } from "./music";
 import { runAgent } from "./runner";
 import { loadAgentMeta } from "./agents";
 
@@ -102,19 +103,24 @@ export async function videoDraft(ctx: HandlerCtx) {
   });
 }
 
-async function outroTemplate(ctx: HandlerCtx, ep: { dir: string }): Promise<OutroTemplate> {
+type Template = OutroTemplate & { logoKey?: string; musicKey?: string; musicVolumeDb?: number };
+
+async function fetchToWork(key: string | undefined, dest: (ext: string) => string): Promise<string | undefined> {
+  if (!key) return undefined;
+  const r = await getStorage().read(key);
+  if (!r) return undefined;
+  const { streamToFile } = await import("@storyforge/core");
+  const p = dest(key.slice(key.lastIndexOf(".")));
+  await streamToFile(r.stream, p);
+  return p;
+}
+
+async function loadTemplate(ctx: HandlerCtx, ep: { dir: string }) {
   const s = await ctx.db.settings.findUnique({ where: { id: "global" } });
-  const t = (s?.template ?? {}) as OutroTemplate & { logoKey?: string };
-  let logoPath: string | undefined;
-  if (t.logoKey) {
-    const r = await getStorage().read(t.logoKey);
-    if (r) {
-      const { streamToFile } = await import("@storyforge/core");
-      logoPath = resolve(ep.dir, `logo${t.logoKey.slice(t.logoKey.lastIndexOf("."))}`);
-      await streamToFile(r.stream, logoPath);
-    }
-  }
-  return { ...t, logoPath };
+  const t = (s?.template ?? {}) as Template;
+  const logoPath = await fetchToWork(t.logoKey, (ext) => resolve(ep.dir, `logo${ext}`));
+  const musicPath = await fetchToWork(t.musicKey, (ext) => resolve(ep.dir, `muzica${ext}`));
+  return { outro: { ...t, logoPath } as OutroTemplate, musicPath, musicVolumeDb: t.musicVolumeDb ?? -22 };
 }
 
 /**
@@ -129,7 +135,7 @@ export async function finalRender(ctx: HandlerCtx) {
   const provider = providerFor(story.book.animationProvider, ctx);
   const nnn = String(story.number).padStart(3, "0");
   const keyBase = `ep-${nnn}/final/${ctx.job.id}`;
-  const tpl = await outroTemplate(ctx, ep);
+  const tpl = await loadTemplate(ctx, ep);
   const attr = { author: story.book.author, number: story.number, title: story.title, book: story.book.title };
   const files = [];
   const checks: Partial<Record<Lang, CheckReport>> = {};
@@ -143,11 +149,18 @@ export async function finalRender(ctx: HandlerCtx) {
     mkdirSync(out, { recursive: true });
     const episodeVideo = await provider.renderFinal(epRef, lang, resolve(out, `episod-${lang}.mp4`), hasVoice ? audioDir : undefined);
 
-    const outroPage = writeOutroPage(ep.pipeline, lang, renderAttribution({ template: lang === "ro" ? story.book.attributionRo : story.book.attributionEn, ...attr }), tpl);
+    const outroPage = writeOutroPage(ep.pipeline, lang, renderAttribution({ template: lang === "ro" ? story.book.attributionRo : story.book.attributionEn, ...attr }), tpl.outro);
     const outroVideo = await provider.renderPage(outroPage, resolve(ep.dir, "out", `outro-${lang}`));
     const final = resolve(ep.dir, "livrare", `${nnn}_${lang.toUpperCase()}.mp4`);
     mkdirSync(resolve(ep.dir, "livrare"), { recursive: true });
-    await appendOutro(episodeVideo, outroVideo, final, await hasAudioStream(episodeVideo));
+    const withAudio = await hasAudioStream(episodeVideo);
+    if (tpl.musicPath && withAudio) {
+      const joined = resolve(out, `cu-outro-${lang}.mp4`);
+      await appendOutro(episodeVideo, outroVideo, joined, true);
+      await addBackgroundMusic(joined, tpl.musicPath, final, tpl.musicVolumeDb, await probeDuration(joined));
+    } else {
+      await appendOutro(episodeVideo, outroVideo, final, withAudio);
+    }
 
     checks[lang] = await provider.check(epRef, final, resolve(out, "check"));
     const cover = await provider.cover(epRef, lang, resolve(ep.dir, "livrare", `coperta_${lang.toUpperCase()}.jpg`));
