@@ -6,6 +6,7 @@ import { appendJobLog, claimJob, requeueStale } from "@storyforge/core/services"
 import { HANDLERS } from "./handlers";
 import { spawnClaude, UsageLimitError } from "./runner";
 import { makeRecorder } from "./ctx";
+import { cronTick } from "./cron";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 process.env.STORYFORGE_ROOT ??= repoRoot;
@@ -55,7 +56,13 @@ async function main() {
   log.info("worker.start", { mock, pollMs, workDir });
   const stale = await requeueStale(db, 2 * 60 * 60_000);
   if (stale) log.warn("worker.requeued_stale", { count: stale });
+  let lastCron = 0;
+  const cronEnabled = process.env.WORKER_CRON !== "0";
   while (!stopping) {
+    if (cronEnabled && !once && Date.now() - lastCron > 60_000) {
+      lastCron = Date.now();
+      await cronTick(db, log).catch((e) => log.error("cron.error", { error: String(e) }));
+    }
     const did = await processOne().catch((e) => {
       log.error("worker.loop_error", { error: String(e) });
       return false;

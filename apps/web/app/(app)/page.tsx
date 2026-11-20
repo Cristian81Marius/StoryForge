@@ -3,6 +3,7 @@ import { STORY_STATUSES, STATUS_LABEL, isReview, type StoryStatus } from "@story
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/StatusBadge";
 import { fmtDate } from "@/lib/format";
+import { thresholdAlerts } from "@storyforge/core/services";
 import { excludeAction, moveAction, retryJobAction, startAction } from "../actions";
 
 export default async function Dashboard() {
@@ -16,11 +17,23 @@ export default async function Dashboard() {
     prisma.job.findMany({ where: { status: "FAILED" }, include: { story: true }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.job.findMany({ where: { status: { in: ["QUEUED", "RUNNING", "WAITING_LIMIT"] } }, include: { story: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  const [alerts, integrations] = await Promise.all([thresholdAlerts(prisma), prisma.integration.findMany({ where: { status: { in: ["EXPIRED", "ERROR"] } } })]);
   const count = (s: StoryStatus) => counts.find((c) => c.status === s)?._count ?? 0;
 
   return (
     <>
       <h1>Dashboard</h1>
+      {integrations.map((i) => (
+        <div key={i.id} className="msg err" data-testid="integration-alert">
+          {i.type === "METRICOOL" ? "Conexiuni Metricool" : i.type}: {i.status === "EXPIRED" ? "expirate / de refăcut" : "eroare"} — {i.lastError}.{" "}
+          <Link href="/settings#integrari">Setări</Link>
+        </div>
+      ))}
+      {alerts.map((a) => (
+        <div key={a.key} className="msg err" data-testid="threshold-alert">
+          ⚠ {a.message}. <Link href="/usage">Usage</Link>
+        </div>
+      ))}
 
       <div className="grid" data-testid="status-counts">
         {STORY_STATUSES.filter((s) => count(s) > 0).map((s) => (

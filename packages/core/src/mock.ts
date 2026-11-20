@@ -75,7 +75,15 @@ export function mockPayload(stage: Stage, story: { number: number; title: string
     case "VOICE":
       return { voices: { ro: "cartesia:Andrei", en: "speko:pending" }, durations: [4.7, 6.4, 6.9, 6.2, 5.8, 7.9, 6.6, 4.4, 8.3], lufs: -14.1, feedbackApplied: feedback ?? null };
     case "FINAL":
-      return { check: { resolution: "1080x1920", codec: "h264", colorspace: "bt709", lufs: -14.0, peakDbfs: -1.6, maxSilenceSec: 0.8 }, feedbackApplied: feedback ?? null };
+      return {
+        provider: "trifa-v2",
+        outro: true,
+        warnings: [],
+        check: Object.fromEntries(
+          (["ro", "en"] as const).map((l) => [l, { width: 1080, height: 1920, codec: "h264", colorSpace: "bt709", fps: 30, durationSec: 98.5, audio: "aac 48000 Hz", lufs: -14.0, peakDbfs: -1.6, silences: "niciuna", sheet: "", raw: "[MOCK]" }]),
+        ),
+        feedbackApplied: feedback ?? null,
+      };
     case "SOCIAL":
       return mockSocial(author, story.number, story.title);
   }

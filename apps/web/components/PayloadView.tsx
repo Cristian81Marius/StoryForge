@@ -113,7 +113,8 @@ export function PayloadView({ stage, payload }: { stage: Stage; payload: unknown
       check?: Record<string, { width: number; height: number; codec: string; colorSpace: string; fps: number; durationSec: number; audio: string | null; lufs: number | null; peakDbfs: number | null; silences: string }>;
       warnings?: string[];
     };
-    if (p?.check) {
+    const valid = p?.check && Object.values(p.check).every((c) => c && typeof c === "object" && typeof (c as { durationSec?: unknown }).durationSec === "number");
+    if (valid && p.check) {
       const ok = (c: NonNullable<typeof p.check>[string]) =>
         c.width === 1080 && c.height === 1920 && c.codec === "h264" && !!c.audio && c.lufs !== null && Math.abs(c.lufs + 14) <= 1 && (c.peakDbfs ?? 0) <= -1;
       return (
@@ -147,7 +148,7 @@ export function PayloadView({ stage, payload }: { stage: Stage; payload: unknown
                   <td>
                     {c.codec} / {c.colorSpace}
                   </td>
-                  <td>{c.durationSec.toFixed(1)} s</td>
+                  <td>{Number(c.durationSec).toFixed(1)} s</td>
                   <td>{c.audio ?? "lipsește"}</td>
                   <td>{c.lufs ?? "—"}</td>
                   <td>{c.peakDbfs ?? "—"}</td>

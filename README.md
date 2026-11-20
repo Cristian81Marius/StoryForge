@@ -3,7 +3,7 @@
 Platformă web + worker pentru producția săptămânală de episoade animate scurte (RO + EN), pornind de la „600 de istorioare religioase” de Iosif Trifa. Episoadele se fac cu skill-ul Claude Code `istorioare-episod-v2`, rulat headless prin abonament (fără cheie API Anthropic).
 
 - **Arhitectura și analiza skill-ului:** [`docs/01-analiza-skill.md`](docs/01-analiza-skill.md)
-- **Stadiu:** fazele 1–3 (schema DB, state machine, UI de aprobare, worker headless, importul cărții, scenaristul real prin skill). Etapele VOICE și SOCIAL rulează deocamdată doar în mod mock.
+- **Stadiu:** fazele 1–6 (schema DB, state machine, UI de aprobare, worker headless, importul cărții, scenaristul real prin skill). Toate etapele au implementare reală. Modul mock (`STORYFORGE_MOCK_AGENTS=1`) rămâne pentru demo și teste.
 
 ## Video (faza 3)
 
@@ -138,6 +138,38 @@ npm run test:e2e
 ```
 
 Testele e2e (Playwright) acoperă fluxul de aprobare pe baza `storyforge_test`: build, start, seed mock, login, cere modificări, re-rulare cu feedback, aprobare, respingere, coadă.
+
+## Voce (faza 4)
+
+- **Speko** (implicit): câte un apel `synthesize` pe scenă, cum cere skill-ul §5.2. Limba e cea a scenei, cu `optimizeFor: accuracy`, vocea din `voci.json` (RO: Cartesia „Andrei”) sau din **Setări → Integrări → Speko**, iar providerul TTS e restricționat la cel al vocii. Urmează `build_v2.py fit --write` (DUR / RATE / VO după voce) și draftul cu voce. Pronunția se verifică prin transcrierea scenei celei mai lungi (§5.6). Costul se calculează din diferența de credit Speko și apare la Usage.
+- **Upload manual** (alternativă): în Setări → Surse, alege „upload manual”. În pagina poveștii (VOICE_DRAFT) încarci câte un fișier audio pe scenă și limbă, apoi apeși „Reîncearcă”.
+- **Vocea EN** nu e aprobată încă în `voci.json`. Până o setezi, routerul alege o voce, iar review-ul afișează un avertisment.
+- **Muzică de fundal** opțională (Setări → Template video): ducking sub voce, apoi re-normalizare la -14 LUFS. Implicit e oprită. Skill-ul recomandă muzica din bibliotecile platformelor.
+
+## Social și Metricool (faza 5)
+
+- **SOCIAL_DRAFT:** agentul social scrie `postare.md` după skill §6 și îl structurează pe limbă × platformă. Workerul garantează atribuirea în fiecare descriere și propune orele după **Setări → Ritm** (zile și oră de postare), în fusul orar al fiecărui canal.
+- **După aprobare** (`social.schedule`), postările intră în **Calendar**. Modul de programare se alege în Setări → Integrări → Metricool:
+  - `manual` (implicit): calendarul arată textul de copiat; tu postezi din Metricool sau din aplicații, apoi apeși „Am postat”.
+  - `mcp` (merge pe **planul Free**): agentul `publisher` apelează `createScheduledPost` din MCP-ul Metricool. Pe calculatorul cu workerul, conectează o dată MCP-ul în Claude Code (`claude mcp add …`, apoi `/mcp` pentru autentificare). Dacă serverul nu se numește `metricool`, setează `METRICOOL_MCP_SERVER`.
+  - `api` (planurile Advanced / Custom): `POST /api/v2/scheduler/posts` cu token-ul criptat.
+- **Media publică:** Metricool cere video-ul la un URL public care nu expiră. Completează „URL public pentru media” (de exemplu un bucket R2 public sau `STORAGE_DRIVER=s3` cu acces public la citire). Fără el, programarea trece automat pe `manual`.
+- **Planul Free:** un singur brand și 20 de postări pe lună. Setează limita în integrare; peste ea, postările trec pe manual. RO și EN pe același brand înseamnă aceleași conturi de rețea.
+- **Marcaje:** `isAiGeneratedContent` (YouTube), `isAigc` (TikTok), `isAiGenerated` (Instagram) și `madeForKids` (YouTube) se trimit în fiecare postare.
+- **Conexiuni expirate:** verificare zilnică (API: `simpleProfiles`; MCP: `getBrandSettings`), afișată în Dashboard, Calendar și Setări.
+- **Mutarea** unei postări din Calendar o reprogramează și în Metricool.
+
+## Usage și planificare (faza 6)
+
+- **Usage:** costul echivalent pe săptămână și lună, grafic pe 12 săptămâni cu pragul, defalcări pe agent / model / effort, etapă, poveste și lună, ultimele rulări (tokens, cost, durată, exit, validare) și costurile serviciilor externe. Depășirea pragurilor apare în Dashboard și Usage și trimite un email, o singură dată pe perioadă.
+- **Cron în worker** (la fiecare minut; `WORKER_CRON=0` îl oprește):
+  - în zilele și la ora din **Setări → Ritm**, pornește SCRIPT_DRAFT pentru următoarele povești din coadă, cel mult `storiesPerWeek` pe săptămână. O poveste produce ambele limbi, deci servește toate canalele;
+  - email „aștept aprobarea ta” pentru fiecare versiune nouă intrată în review;
+  - trecerea SCHEDULED → PUBLISHED după ora ultimei postări;
+  - verificarea zilnică a conexiunilor Metricool.
+
+  Fiecare acțiune e unică prin `CronRun`, deci repornirile nu o dublează.
+- **Email:** prin Resend (token API, nu parolă SMTP). Completează expeditorul de pe un domeniu verificat și destinatarul în Setări → Integrări → Email. Linkurile din email folosesc `APP_URL`.
 
 ## Workerul ca serviciu Windows
 

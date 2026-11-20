@@ -289,3 +289,13 @@ model Settings {
   thresholds Json   @default("{\"weeklyCostUsd\":50,\"monthlyCostUsd\":200}")
   notifyEmail String?
 }
+
+/// Execuții unice ale sarcinilor programate (cron) și ale notificărilor: cheia unică împiedică dublarea
+/// (ex. "start:2026-11-24", "check:2026-11-24", "notify:<versionId>", "threshold:week:2026-W48").
+model CronRun {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  kind      String
+  detail    Json     @default("{}")
+  createdAt DateTime @default(now())
+}

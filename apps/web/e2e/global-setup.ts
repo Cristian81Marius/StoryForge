@@ -8,5 +8,6 @@ export default function globalSetup() {
   if (!/_test(\?|$)/.test(env.DATABASE_URL!)) throw new Error("E2E rulează doar pe o bază al cărei nume se termină în _test");
   // migrate deploy nu șterge nimic; seed-ul înlocuiește doar date [MOCK] (vezi garda din seed).
   execFileSync("npx", ["prisma", "migrate", "deploy"], { cwd: root, env, stdio: "inherit" });
-  execFileSync("npx", ["tsx", "prisma/seed.ts"], { cwd: root, env, stdio: "inherit" });
+  // baza e verificată mai sus ca fiind de test (_test): golirea e permisă explicit
+  execFileSync("npx", ["tsx", "prisma/seed.ts"], { cwd: root, env: { ...env, SEED_ALLOW_WIPE: "1" }, stdio: "inherit" });
 }
