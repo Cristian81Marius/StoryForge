@@ -1,0 +1,28 @@
+{
+  "name": "@storyforge/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "hash-password": "tsx scripts/hash-password.ts",
+    "test:e2e": "playwright test --trace off"
+  },
+  "dependencies": {
+    "@storyforge/core": "*",
+    "@prisma/client": "6.19.2",
+    "diff": "8.0.2",
+    "jose": "6.1.0",
+    "next": "15.5.28",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  }
+}

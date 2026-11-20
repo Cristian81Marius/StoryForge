@@ -1,0 +1,20 @@
+{
+  "name": "@storyforge/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "once": "tsx --env-file-if-exists=../../.env src/index.ts --once",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@storyforge/core": "*",
+    "@prisma/client": "6.19.2",
+    "zod-to-json-schema": "3.24.6"
+  },
+  "devDependencies": {
+    "tsx": "4.20.6",
+    "vitest": "3.2.4"
+  }
+}

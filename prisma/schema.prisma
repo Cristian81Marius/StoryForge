@@ -1,0 +1,255 @@
+// StoryForge — model de date.
+// Etapele și statusurile sunt definite o singură dată, în packages/core/src/pipeline.ts;
+// aici sunt oglindite ca enum-uri Postgres. Un test verifică că cele două liste coincid.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StoryStatus {
+  NEW
+  SCRIPT_DRAFT
+  SCRIPT_REVIEW
+  VIDEO_DRAFT
+  VIDEO_REVIEW
+  VOICE_DRAFT
+  VOICE_REVIEW
+  FINAL_RENDER
+  FINAL_REVIEW
+  SOCIAL_DRAFT
+  SOCIAL_REVIEW
+  SCHEDULED
+  PUBLISHED
+  REJECTED
+}
+
+enum Stage {
+  SCRIPT
+  VIDEO
+  VOICE
+  FINAL
+  SOCIAL
+}
+
+enum Decision {
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  WAITING_LIMIT // limita abonamentului Claude atinsă; reluat automat după `runAfter`
+}
+
+enum IntegrationType {
+  METRICOOL
+  SPEKO
+  TTS_ALT
+  SMTP
+}
+
+enum IntegrationStatus {
+  UNTESTED
+  OK
+  EXPIRED
+  ERROR
+}
+
+/// O sursă de conținut (o carte). Tematica e configurabilă aici, nu în cod:
+/// skill-ul, atribuirea și providerii pot fi schimbați per carte.
+model Book {
+  id                String   @id @default(cuid())
+  title             String
+  author            String
+  /// Skill-ul Claude Code care produce episodul (sursa de adevăr).
+  skillName         String   @default("istorioare-episod-v2")
+  /// Șabloane de atribuire. Variabile: {author} {number} {title} {book}
+  attributionRo     String   @default("După o istorioară de {author} · Istorioara nr. {number} «{title}» · {book}")
+  attributionEn     String   @default("Based on a story by {author} · Story no. {number} “{title}” · {book}")
+  animationProvider String   @default("trifa-v2")
+  ttsProvider       String   @default("speko")
+  sourceFileKey     String?
+  createdAt         DateTime @default(now())
+  stories           Story[]
+}
+
+model Story {
+  id              String      @id @default(cuid())
+  bookId          String
+  book            Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  /// Numărul istorioarei în carte.
+  number          Int
+  title           String
+  /// Doar textul istorioarei (fără prefață, note, ilustrații ale ediției).
+  text            String
+  /// Trasabilitate: „nr. 20 — Urechi mântuite”.
+  sourceReference String
+  status          StoryStatus @default(NEW)
+  /// Ordinea în coadă (mai mic = mai devreme).
+  position        Int
+  excluded        Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  versions        Version[]
+  jobs            Job[]
+  schedules       Schedule[]
+  externalCosts   ExternalCost[]
+
+  @@unique([bookId, number])
+  @@index([status])
+  @@index([position])
+}
+
+model Version {
+  id              String    @id @default(cuid())
+  storyId         String
+  story           Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  stage           Stage
+  number          Int
+  /// Output-ul validat (Zod) al etapei: storyboard, rezultat QA, kit social etc.
+  payload         Json
+  /// Fișiere în storage: [{ key, kind, lang?, mime, bytes }]
+  files           Json      @default("[]")
+  /// Feedback-ul care a produs această versiune (de la versiunea anterioară).
+  inputFeedback   String?
+  parentVersionId String?
+  decision        Decision?
+  /// Comentariul la decizie (obligatoriu la CHANGES_REQUESTED).
+  decisionComment String?
+  decidedAt       DateTime?
+  jobId           String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([storyId, stage, number])
+}
+
+model Job {
+  id         String    @id @default(cuid())
+  storyId    String?
+  story      Story?    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  /// ex. "script.draft", "video.draft", "voice.draft", "final.render", "social.draft", "social.schedule", "cron.weekly"
+  kind       String
+  stage      Stage?
+  status     JobStatus @default(QUEUED)
+  /// { previousVersionId?, feedback? , ... }
+  input      Json      @default("{}")
+  attempts   Int       @default(0)
+  error      String?
+  runAfter   DateTime  @default(now())
+  lockedBy   String?
+  lockedAt   DateTime?
+  /// Loguri structurate (fără secrete), adăugate de worker.
+  logs       Json      @default("[]")
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  runs       Run[]
+
+  @@index([status, runAfter])
+}
+
+/// O rulare `claude -p` (sau alt apel extern contorizat).
+model Run {
+  id                  String   @id @default(cuid())
+  jobId               String
+  job                 Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  agent               String
+  model               String?
+  effort              String?
+  attempt             Int      @default(1)
+  inputTokens         Int      @default(0)
+  outputTokens        Int      @default(0)
+  cacheReadTokens     Int      @default(0)
+  cacheCreationTokens Int      @default(0)
+  /// Estimare locală a Claude Code (total_cost_usd). Pe abonament NU e factură.
+  costUsd             Float    @default(0)
+  /// modelUsage brut, per model (include subagenții).
+  modelUsage          Json?
+  durationMs          Int      @default(0)
+  durationApiMs       Int?
+  numTurns            Int?
+  exitCode            Int?
+  sessionId           String?
+  outputValid         Boolean  @default(false)
+  error               String?
+  createdAt           DateTime @default(now())
+
+  @@index([agent, createdAt])
+}
+
+model Channel {
+  id               String     @id @default(cuid())
+  name             String
+  /// "ro" | "en"
+  language         String
+  metricoolBrandId String?
+  /// ["tiktok","instagram","youtube","facebook"]
+  platforms        String[]
+  timezone         String     @default("Europe/Bucharest")
+  active           Boolean    @default(true)
+  schedules        Schedule[]
+}
+
+model Integration {
+  id          String            @id @default(cuid())
+  type        IntegrationType   @unique
+  /// AES-256-GCM, format v1:iv:tag:ciphertext (base64). Cheia: STORYFORGE_ENC_KEY.
+  tokenEnc    String?
+  /// Date nesecrete (ex. userId Metricool, voice id-uri).
+  config      Json              @default("{}")
+  status      IntegrationStatus @default(UNTESTED)
+  lastChecked DateTime?
+  lastError   String?
+  updatedAt   DateTime          @updatedAt
+}
+
+model Schedule {
+  id          String    @id @default(cuid())
+  storyId     String
+  story       Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  channelId   String
+  channel     Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  versionId   String?
+  platform    String
+  scheduledAt DateTime
+  externalId  String?
+  /// PENDING | SCHEDULED | PUBLISHED | FAILED | MANUAL
+  status      String    @default("PENDING")
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([scheduledAt])
+}
+
+/// Costuri ale serviciilor externe (Speko etc.), acolo unde API-ul le expune.
+model ExternalCost {
+  id        String   @id @default(cuid())
+  provider  String
+  storyId   String?
+  story     Story?   @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  amountUsd Float
+  units     String?
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+/// Setări globale (un singur rând, id = "global").
+model Settings {
+  id         String @id @default("global")
+  /// { storiesPerWeek, days: [1..7], hour: "HH:mm", timezone }
+  rhythm     Json   @default("{\"storiesPerWeek\":1,\"days\":[2],\"hour\":\"09:00\",\"timezone\":\"Europe/Bucharest\"}")
+  /// Template video: culori, fonturi, logo.
+  template   Json   @default("{}")
+  /// Praguri de avertizare usage: { weeklyCostUsd, monthlyCostUsd, weeklyTokens }
+  thresholds Json   @default("{\"weeklyCostUsd\":50,\"monthlyCostUsd\":200}")
+  notifyEmail String?
+}

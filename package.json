@@ -1,0 +1,35 @@
+{
+  "name": "storyforge",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force --skip-generate",
+    "dev": "npm run dev -w @storyforge/web",
+    "worker": "npm run start -w @storyforge/worker",
+    "test": "npm run test -w @storyforge/core && npm run test -w @storyforge/worker",
+    "test:e2e": "npm run test:e2e -w @storyforge/web",
+    "typecheck": "tsc -p packages/core && tsc -p apps/worker && tsc -p apps/web --noEmit",
+    "skill:verify": "tsx scripts/verify-skill.mts",
+    "demo": "tsx --env-file-if-exists=.env scripts/demo-phase1.mts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.12",
+    "prisma": "6.19.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.2"
+  }
+}
