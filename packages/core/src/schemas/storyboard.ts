@@ -122,7 +122,7 @@ export const Storyboard = z
     /** Fișierele native ale providerului (ex. paginile HTML ale motorului v2), chei în storage. */
     render: z.object({
       provider: z.string().min(1),
-      files: z.record(Lang, z.string().min(1)),
+      files: z.object({ ro: z.string().min(1), en: z.string().min(1) }),
     }),
     /** Note ale scenaristului: ce nume a schimbat, de ce etc. */
     notes: z.array(z.string()).default([]),
