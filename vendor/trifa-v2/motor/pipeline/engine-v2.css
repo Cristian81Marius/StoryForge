@@ -1,0 +1,67 @@
+/* Istorioare cu tâlc – motor v2: stiluri. Fonturile se caută în ../fonts/ */
+@font-face{font-family:Lora;src:url(../fonts/Lora.ttf);font-weight:400 700;font-style:normal}
+@font-face{font-family:Lora;src:url(../fonts/Lora-Italic.ttf);font-weight:400 700;font-style:italic}
+@font-face{font-family:Cinzel;src:url(../fonts/Cinzel.ttf);font-weight:400 900}
+html,body{margin:0;background:#000;width:540px;height:960px;overflow:hidden}
+#stage{position:relative;width:540px;height:960px;overflow:hidden;background:#000;cursor:pointer}
+.scene{position:absolute;inset:0;visibility:hidden;transform-origin:50% 55%;will-change:opacity,transform}
+.scene>svg{position:absolute;inset:0;width:540px;height:960px;display:block}
+.grade{position:absolute;inset:0;pointer-events:none}
+#flash{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:900}
+#hud{position:absolute;inset:0;pointer-events:none;z-index:950}
+#hud .vig{position:absolute;inset:0;background:radial-gradient(ellipse 78% 62% at 50% 52%,rgba(0,0,0,0) 58%,rgba(8,4,20,.36) 100%)}
+#hud .paper{position:absolute;inset:0;opacity:.075;mix-blend-mode:overlay;background-size:260px 260px}
+
+/* caseta de text: apare cu scena, cuvintele vin odată cu vocea */
+.cap{position:absolute;left:22px;right:22px;top:96px;
+  background:linear-gradient(180deg,rgba(14,14,40,.80),rgba(10,10,30,.74));border-radius:20px;
+  padding:16px 20px 17px;font-family:Lora,serif;font-size:23px;line-height:1.38;color:#fff8e8;
+  box-shadow:0 8px 28px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,236,190,.14);border:1px solid rgba(255,214,120,.30);
+  text-shadow:0 1px 2px rgba(0,0,0,.35);z-index:50}
+.cap em{font-style:normal;color:#ffd36b;font-weight:600}
+.cap .d{display:block}
+.cap .d+.d{margin-top:8px}
+.cap .w{display:inline-block;will-change:opacity,transform}
+.cap.big{font-size:27px;text-align:center}
+
+/* text în SVG */
+.t-title{font-family:Cinzel,serif;font-weight:700;font-size:60px;fill:url(#goldText);text-anchor:middle;paint-order:stroke;stroke:rgba(60,30,0,.35);stroke-width:2px}
+.t-title.shine{fill:url(#shineGold)}
+.t-sub{font-family:Lora,serif;font-style:italic;font-size:22px;fill:#efe7d2;text-anchor:middle}
+.t-q{font-family:Lora,serif;font-size:36px;fill:#f4efe2;text-anchor:middle}
+.t-q.gold{fill:#ffd36b;font-weight:700;font-size:40px}
+.t-label{font-family:Lora,serif;font-size:20px;fill:#fff7df;text-anchor:middle;paint-order:stroke;stroke:#2a1a10;stroke-width:4px}
+.t-fruit{font-family:Lora,serif;font-size:18px;font-weight:700;fill:#3b2a12;text-anchor:middle;paint-order:stroke;stroke:#fffbe8;stroke-width:5px}
+.t-verse{font-family:Lora,serif;font-style:italic;font-size:29px;fill:#fff3d6;text-anchor:middle}
+.t-ref{font-family:Lora,serif;font-weight:700;font-size:22px;fill:#ffd36b;text-anchor:middle}
+.t-credit{font-family:Lora,serif;font-size:20px;fill:#d9d2e6;text-anchor:middle}
+
+/* compatibilitate cu animațiile v1 (a-*) */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes twinkle{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes bob{from{transform:translateY(0)}to{transform:translateY(-4px)}}
+@keyframes floaty{from{transform:translateY(0) rotate(-6deg)}to{transform:translateY(-18px) rotate(6deg)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{from{transform:translateX(-25px)}to{transform:translateX(25px)}}
+@keyframes pulse{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:.95;transform:scale(1.1)}}
+@keyframes popIn{0%{transform:scale(0);opacity:0}70%{transform:scale(1.18);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes dash{to{stroke-dashoffset:0}}
+@keyframes heartFill{0%,40%{fill:#6e5d72}60%,100%{fill:#e3485c}}
+@keyframes beat{0%,100%{transform:scale(1)}14%{transform:scale(1.13)}28%{transform:scale(1)}42%{transform:scale(1.07)}56%{transform:scale(1)}}
+@keyframes flicker{0%,100%{transform:scale(1,1) skewX(0)}25%{transform:scale(1.06,1.14) skewX(4deg)}50%{transform:scale(.95,.92) skewX(-3deg)}75%{transform:scale(1.04,1.08) skewX(2deg)}}
+@keyframes rise{from{transform:translate(0,0);opacity:0}15%{opacity:1}to{transform:translate(12px,-300px);opacity:0}}
+@keyframes sway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+.a-fade{animation:fadeIn 1.4s ease both}
+.a-twinkle{animation:twinkle 2.4s ease-in-out infinite both}
+.a-bob{animation:bob .45s ease-in-out infinite alternate both}
+.a-float{animation:floaty 3s ease-in-out infinite alternate both}
+.a-spin{animation:spin 40s linear infinite}
+.a-drift{animation:drift 6s ease-in-out infinite alternate both}
+.a-pulse{animation:pulse 3s ease-in-out infinite both}
+.a-pop{animation:popIn .7s ease-out both}
+.a-dash{animation:dash 2.5s ease-in-out both}
+.a-heart{animation:heartFill 6s ease both}
+.a-beat{animation:beat 1.6s ease-in-out infinite both}
+.a-flicker{animation:flicker 1.3s ease-in-out infinite both}
+.a-rise{animation:rise 4s linear infinite both}
+.a-sway{animation:sway 2.6s ease-in-out infinite alternate both}

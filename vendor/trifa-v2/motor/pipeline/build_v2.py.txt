@@ -1,0 +1,619 @@
+"""Istorioare cu tâlc – pipeline video v2.
+
+Folosire (din folderul cu pagina; fonturile stau în ../fonts/):
+  python3 build_v2.py preview PAGE.html OUT            -> OUT/preview_grid.jpg  (2 cadre pe scenă: mijloc și final)
+  python3 build_v2.py draft   PAGE.html OUT [AUDIO]    -> OUT/draft.mp4  (540x960, rapid, cu numărul scenei; cu voce dacă dai AUDIO)
+  python3 build_v2.py fit     PAGE.html AUDIO [3,8] [--write]
+        DUR, RATE și VO (când vorbește vocea în fiecare scenă) strânse după voce. --write le scrie direct în pagină.
+        3,8 = scenele a căror frază continuă în scena următoare (sau data-cont="1" pe scenă).
+  python3 build_v2.py render  PAGE.html OUT [--fps 30] [--workers 2] [--resume]
+                                                       -> OUT/video_only.mp4 (1080x1920, culori BT.709)
+  python3 build_v2.py mix     PAGE.html OUT AUDIO DEST.mp4 [--no-sfx] [--no-voicefx]
+        voce curățată și caldă, efecte sonore discrete, -14 LUFS, codare finală de calitate.
+  python3 build_v2.py cover   PAGE.html DEST.jpg [t=2.5]
+  python3 build_v2.py check   DEST.mp4 OUT              -> raport (rezoluție, codec, LUFS, tăceri) + OUT/check_sheet.jpg
+  python3 build_v2.py sfxdemo OUT                       -> mostre cu toate sunetele (pentru aprobare)
+
+Necesită: playwright + google-chrome/chromium, ffmpeg, Pillow, numpy.
+"""
+import sys, os, subprocess, json, re, math, shutil, wave, time
+from multiprocessing import Process
+
+FPS = 30
+SR = 48000
+
+
+# ---------------------------------------------------------------- browser
+def chrome():
+    for p in ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def open_page(p, page, dsf=2):
+    exe = chrome()
+    b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+    pg = b.new_page(viewport={"width": 540, "height": 960}, device_scale_factor=dsf)
+    errs = []
+    pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.add_init_script("window.__RENDER=true")
+    pg.goto('file://' + os.path.abspath(page))
+    pg.wait_for_timeout(800)
+    pg.evaluate("document.fonts.ready")
+    if errs:
+        print('EROARE ÎN PAGINĂ:', *errs, sep='\n  ')
+    R = pg.evaluate("REEL")
+    return b, pg, R
+
+
+def reel_info(page):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b, pg, R = open_page(p, page, 1)
+        b.close()
+    return R
+
+
+# ---------------------------------------------------------------- previzualizare
+def preview(page, out):
+    from PIL import Image, ImageDraw
+    from playwright.sync_api import sync_playwright
+    os.makedirs(out, exist_ok=True)
+    with sync_playwright() as p:
+        b, pg, R = open_page(p, page, 1)
+        ims = []
+        for k, (s, d) in enumerate(zip(R['S'], R['DUR'])):
+            for frac in (0.5, 0.93):
+                pg.evaluate(f"renderAt({s + d * frac})")
+                f = f'{out}/_p{k}_{frac}.png'
+                pg.screenshot(path=f)
+                ims.append((k, frac, f))
+        b.close()
+    n = len(R['DUR'])
+    cols = min(4, n) * 2
+    rows = (n * 2 + cols - 1) // cols
+    W = Image.new('RGB', (216 * cols + (cols // 2 - 1) * 8, 384 * rows), (20, 20, 28))
+    dr = ImageDraw.Draw(W)
+    for i, (k, frac, f) in enumerate(ims):
+        c, r = i % cols, i // cols
+        x = c * 216 + (c // 2) * 8
+        W.paste(Image.open(f).resize((216, 384)), (x, r * 384))
+        if frac == 0.5:
+            dr.rectangle([x, r * 384, x + 46, r * 384 + 22], fill=(0, 0, 0))
+            dr.text((x + 6, r * 384 + 5), f'S{k}', fill=(255, 211, 107))
+        os.remove(f)
+    W.save(f'{out}/preview_grid.jpg', quality=88)
+    print('preview', f'{out}/preview_grid.jpg', f'({n} scene, {R["total"]:.1f} s)')
+
+
+# ---------------------------------------------------------------- randare
+def _render_worker(page, out, idxs, fps, dsf, quality, draft):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b, pg, R = open_page(p, page, dsf)
+        last = len(R['DUR']) - 1
+        for k in idxs:
+            s, d = R['S'][k], R['DUR'][k]
+            fin = f'{out}/parts/s{k:02d}.mp4'
+            if os.path.exists(fin):
+                continue
+            n = round(d * fps)
+            tmp = f'{out}/parts/tmp_{k:02d}.mp4'
+            vf = 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p'
+            if draft:
+                vf = ('drawtext=fontfile=../fonts/Lora.ttf:text=\'S%d  %%{eif\\:t+%.2f\\:d}s\':x=10:y=h-34:fontsize=18:'
+                      'fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=5,' % (k, s)) + vf
+            enc = ['-c:v', 'libx264', '-crf', '26' if draft else '12', '-preset', 'ultrafast' if draft else 'veryfast']
+            ff = subprocess.Popen(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', str(fps), '-c:v', 'mjpeg', '-i', '-',
+                                   '-vf', vf] + enc + ['-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-color_primaries', 'bt709',
+                                   '-color_trc', 'bt709', '-color_range', 'tv', '-r', str(fps), tmp], stdin=subprocess.PIPE)
+            for i in range(n):
+                pg.evaluate(f"renderAt({s + i / fps})")
+                ff.stdin.write(pg.screenshot(type='jpeg', quality=quality))
+            ff.stdin.close()
+            if ff.wait() != 0:
+                sys.exit('randarea a eșuat la scena %d' % k)
+            os.rename(tmp, fin)
+            print(f'scena {k} gata ({n} cadre)', flush=True)
+        b.close()
+
+
+def render(page, out, fps=FPS, workers=2, resume=False, draft=False):
+    R = reel_info(page)
+    os.makedirs(out + '/parts', exist_ok=True)
+    if not resume:
+        for f in os.listdir(out + '/parts'):
+            os.remove(os.path.join(out, 'parts', f))
+    n = len(R['DUR'])
+    # împărțim scenele între procese, echilibrat după durată
+    order = sorted(range(n), key=lambda k: -R['DUR'][k])
+    buckets = [[] for _ in range(max(1, workers))]
+    loads = [0] * len(buckets)
+    for k in order:
+        j = loads.index(min(loads))
+        buckets[j].append(k)
+        loads[j] += R['DUR'][k]
+    t0 = time.time()
+    dsf, q = (1, 80) if draft else (2, 94)
+    procs = [Process(target=_render_worker, args=(page, out, sorted(bk), fps, dsf, q, draft)) for bk in buckets if bk]
+    for pr in procs:
+        pr.start()
+    for pr in procs:
+        pr.join()
+    if any(pr.exitcode for pr in procs):
+        sys.exit('randarea a eșuat (rulează din nou cu --resume ca să continui de unde a rămas)')
+    with open(f'{out}/parts/list.txt', 'w') as f:
+        for k in range(n):
+            f.write(f"file '{os.path.abspath(out)}/parts/s{k:02d}.mp4'\n")
+    name = 'draft_video.mp4' if draft else 'video_only.mp4'
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{out}/parts/list.txt', '-c', 'copy',
+                    f'{out}/{name}'], check=True)
+    print('video', f'{out}/{name}', f'{R["total"]:.1f} s în {time.time() - t0:.0f} s')
+    return R
+
+
+def draft(page, out, adir=None):
+    R = render(page, out, fps=24, workers=2, draft=True)
+    src = f'{out}/draft_video.mp4'
+    dest = f'{out}/draft.mp4'
+    if adir and os.path.isdir(adir):
+        voice = build_voice_track(R, adir, f'{out}/_voice.wav')
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', src, '-i', voice, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
+                        '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', dest], check=True)
+    else:
+        shutil.copy(src, dest)
+    shutil.rmtree(f'{out}/parts', ignore_errors=True)
+    print('draft', dest)
+
+
+# ---------------------------------------------------------------- audio: utilitare
+def read_wav(path):
+    """Citește orice fișier audio prin ffmpeg -> mono float32 la 48 kHz."""
+    import numpy as np
+    raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', path, '-ac', '1', '-ar', str(SR), '-f', 'f32le', '-'])
+    return np.frombuffer(raw, dtype=np.float32).copy()
+
+
+def write_wav(path, x):
+    import numpy as np
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim == 1:
+        x = np.stack([x, x], 1)
+    x = np.clip(x, -1, 1)
+    with wave.open(path, 'wb') as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes((x * 32767).astype('<i2').tobytes())
+    return path
+
+
+def speech_span(x, thr_db=-42):
+    """Începutul și sfârșitul vorbirii din fișier (s), ignorând liniștea de la capete."""
+    import numpy as np
+    hop = int(SR * 0.01)
+    if len(x) < hop:
+        return 0.0, len(x) / SR
+    fr = x[:len(x) // hop * hop].reshape(-1, hop)
+    db = 20 * np.log10(np.sqrt((fr ** 2).mean(1)) + 1e-9)
+    on = np.where(db > thr_db)[0]
+    if len(on) == 0:
+        return 0.0, len(x) / SR
+    return max(0, on[0] - 2) * hop / SR, min(len(fr), on[-1] + 4) * hop / SR
+
+
+def voice_offset(i):
+    return 0.4 if i == 0 else 0.3
+
+
+# ---------------------------------------------------------------- fit
+def fit(page, adir, cont='', write=False, last_tail=1.8, pause=0.8, cpause=0.45, maxrate=1.35):
+    R = reel_info(page)
+    cfg = read_config(page)
+    D0 = cfg.get('DUR0') or cfg['DUR']
+    C = {int(x) for x in cont.split(',') if x.strip()}
+    C |= {i for i, m in enumerate(R['meta']) if m.get('cont')}
+    D, RT, VO = [], [], []
+    n = len(D0)
+    for i, d0 in enumerate(D0):
+        f = f'{adir}/s{i:02d}.wav'
+        if not os.path.exists(f):
+            D.append(d0); RT.append(1); VO.append(None)
+            print(f'  scena {i}: fără voce, rămâne {d0} s')
+            continue
+        x = read_wav(f)
+        a, b = speech_span(x)
+        off = voice_offset(i)
+        if i == 0:
+            d = off + b + 0.5
+        elif i == n - 1:
+            d = off + b + last_tail
+        else:
+            d = off + b + (cpause if i in C else pause)
+        d = round(max(d, 3.0), 2)
+        D.append(d)
+        RT.append(round(min(maxrate, max(1.0, d0 / d)), 2))
+        VO.append([round(off + a, 2), round(b - a, 2)])
+    print('DUR ', json.dumps(D))
+    print('RATE', json.dumps(RT))
+    print('VO  ', json.dumps(VO))
+    print('total', round(sum(D), 1), 's')
+    if write:
+        cfg['DUR0'] = D0
+        cfg['DUR'] = D
+        cfg['RATE'] = RT
+        cfg['VO'] = VO
+        write_config(page, cfg)
+        print('scris în', page)
+
+
+CFG_RE = re.compile(r'(<script id="reel-config" type="application/json">)(.*?)(</script>)', re.S)
+
+
+def read_config(page):
+    m = CFG_RE.search(open(page, encoding='utf-8').read())
+    if not m:
+        sys.exit('pagina nu are <script id="reel-config" type="application/json">')
+    return json.loads(m.group(2))
+
+
+def write_config(page, cfg):
+    s = open(page, encoding='utf-8').read()
+    s = CFG_RE.sub(lambda m: m.group(1) + json.dumps(cfg, ensure_ascii=False) + m.group(3), s)
+    open(page, 'w', encoding='utf-8').write(s)
+
+
+# ---------------------------------------------------------------- sunete (sintetizate, fără licențe)
+def _np():
+    import numpy as np
+    return np
+
+
+def _env(n, a=0.005, r=0.2):
+    np = _np()
+    e = np.ones(n)
+    na, nr = int(a * SR), int(r * SR)
+    if na:
+        e[:na] = np.linspace(0, 1, na)
+    if nr:
+        e[-nr:] *= np.linspace(1, 0, nr) ** 2
+    return e
+
+
+def _band(x, lo, hi):
+    np = _np()
+    X = np.fft.rfft(x)
+    f = np.fft.rfftfreq(len(x), 1 / SR)
+    m = ((f >= lo) & (f <= hi)).astype(float)
+    # margini moi
+    k = 60
+    m = np.convolve(m, np.ones(k) / k, mode='same')
+    return np.fft.irfft(X * m, len(x))
+
+
+def _norm(x, peak=1.0):
+    np = _np()
+    p = np.abs(x).max() + 1e-9
+    return x / p * peak
+
+
+def sfx_chime(freq=1046.5, dur=2.4):
+    np = _np()
+    t = np.arange(int(dur * SR)) / SR
+    x = np.zeros_like(t)
+    for ratio, amp, dec in [(1, 1, 1.5), (2.0, .35, .9), (2.76, .3, .7), (5.4, .12, .35), (8.93, .05, .2)]:
+        x += amp * np.sin(2 * np.pi * freq * ratio * t + ratio) * np.exp(-t / dec)
+    x *= _env(len(t), .004, .3)
+    return _norm(x, .9)
+
+
+def sfx_shimmer():
+    np = _np()
+    notes = [1046.5, 1174.7, 1318.5, 1568.0, 1760.0, 2093.0]
+    out = np.zeros(int(3.2 * SR))
+    for i, f in enumerate(notes):
+        c = sfx_chime(f, 2.2) * (0.75 - i * .06)
+        st = int(i * .085 * SR)
+        out[st:st + len(c)] += c[:len(out) - st]
+    air = _band(np.random.default_rng(3).standard_normal(len(out)), 5000, 11000)
+    t = np.arange(len(out)) / SR
+    air *= np.exp(-((t - .5) / .45) ** 2) * .5
+    return _norm(out + _norm(air, .25), .85)
+
+
+def sfx_whoosh(dur=0.8):
+    np = _np()
+    n = int(dur * SR)
+    w = np.random.default_rng(5).standard_normal(n)
+    lo, hi = _band(w, 200, 900), _band(w, 900, 4000)
+    t = np.linspace(0, 1, n)
+    mixw = np.sin(np.pi * t)
+    x = lo * (1 - mixw) + hi * mixw
+    x *= np.sin(np.pi * t) ** 2
+    return _norm(x, .8)
+
+
+def sfx_bell(freq=196.0, dur=5.0):
+    np = _np()
+    t = np.arange(int(dur * SR)) / SR
+    x = np.zeros_like(t)
+    for ratio, amp, dec in [(.5, .5, 3.5), (1, 1, 2.6), (1.19, .45, 1.8), (1.5, .35, 1.4), (2.0, .3, 1.1), (2.52, .18, .8), (3.0, .12, .6)]:
+        x += amp * np.sin(2 * np.pi * freq * ratio * t) * np.exp(-t / dec) * (1 + .02 * np.sin(2 * np.pi * 3 * t))
+    x *= _env(len(t), .003, .5)
+    return _norm(x, .9)
+
+
+def sfx_pop():
+    np = _np()
+    t = np.arange(int(.18 * SR)) / SR
+    f = 600 + 900 * np.exp(-t / .03)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / .05)
+    return _norm(x, .6)
+
+
+def amb_bed(kind, dur, seed=1):
+    """Fundal sonor de lungimea dur (s)."""
+    np = _np()
+    rng = np.random.default_rng(seed)
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    brown = np.cumsum(rng.standard_normal(n))
+    brown = _band(brown - brown.mean(), 40, 900)
+    brown = _norm(brown, 1)
+    if kind in ('wind', 'birds', 'night', 'field'):
+        out += brown * (.35 + .25 * np.sin(2 * np.pi * .07 * t + seed)) * (.6 if kind != 'wind' else 1)
+    if kind == 'birds':
+        k = 0.0
+        while k < dur - .5:
+            k += rng.uniform(.5, 1.8)
+            f0 = rng.uniform(2600, 4200)
+            for j in range(rng.integers(2, 5)):
+                st = int((k + j * .11) * SR)
+                ln = int(.07 * SR)
+                if st + ln >= n:
+                    break
+                tt = np.arange(ln) / SR
+                sw = f0 + rng.uniform(600, 1400) * np.sin(np.pi * tt / .07)
+                ch = np.sin(2 * np.pi * np.cumsum(sw) / SR) * np.sin(np.pi * tt / .07) ** 2
+                out[st:st + ln] += ch * rng.uniform(.25, .5)
+    if kind == 'night':
+        for ph in range(3):
+            f = 4300 + ph * 260
+            gate = (np.sin(2 * np.pi * 34 * t) > 0).astype(float) * (np.sin(2 * np.pi * (1.3 + ph * .2) * t + ph) > .55)
+            out += np.sin(2 * np.pi * f * t) * gate * .05
+    if kind == 'fire':
+        out += _band(rng.standard_normal(n), 60, 500) * .5
+        for _ in range(int(dur * 9)):
+            st = rng.integers(0, n - 600)
+            ln = rng.integers(80, 500)
+            out[st:st + ln] += rng.standard_normal(ln) * np.exp(-np.arange(ln) / (ln / 4)) * rng.uniform(.3, 1)
+    if kind in ('sea', 'water'):
+        out += brown * (.45 + .4 * np.sin(2 * np.pi * .11 * t + seed) ** 2)
+        out += _band(rng.standard_normal(n), 1500, 6000) * .12 * (.5 + .5 * np.sin(2 * np.pi * .11 * t + seed) ** 4)
+    if kind == 'bees':
+        for k in range(4):
+            f = 210 + k * 13 + 6 * np.sin(2 * np.pi * (.4 + k * .17) * t)
+            ph = 2 * np.pi * np.cumsum(f) / SR
+            saw = sum(np.sin(ph * h) / h for h in range(1, 9))
+            out += saw * (.25 + .2 * np.sin(2 * np.pi * (.23 + k * .11) * t + k) ** 2)
+        out = _band(out, 120, 2500)
+    if kind == 'rain':
+        out += _band(rng.standard_normal(n), 800, 9000) * .5
+        for _ in range(int(dur * 25)):
+            st = rng.integers(0, n - 300)
+            out[st:st + 200] += rng.standard_normal(200) * np.exp(-np.arange(200) / 40) * .8
+    if kind == 'room':
+        out += brown * .15
+    if kind == 'church':
+        out += brown * .18 + _band(rng.standard_normal(n), 200, 1200) * .05
+    if kind == 'city':
+        out += brown * .5 + _band(rng.standard_normal(n), 300, 2000) * .12
+    out = _norm(out, .7)
+    fade = min(int(.6 * SR), n // 3)
+    out[:fade] *= np.linspace(0, 1, fade)
+    out[-fade:] *= np.linspace(1, 0, fade)
+    return out
+
+
+SFX = {'chime': sfx_chime, 'shimmer': sfx_shimmer, 'whoosh': sfx_whoosh, 'bell': sfx_bell, 'pop': sfx_pop}
+SFX_GAIN = {'chime': .12, 'shimmer': .13, 'whoosh': .08, 'bell': .2, 'pop': .1}
+AMB_GAIN = .075
+
+
+def build_fx_track(R, path, auto=True):
+    """Pista de efecte (stereo) pentru tot episodul, din data-sfx și data-ambs ale scenelor."""
+    np = _np()
+    total = R['total']
+    n = int((total + 1) * SR)
+    L = np.zeros(n)
+    Rr = np.zeros(n)
+    used = []
+    for j, m in enumerate(R['meta']):
+        s, d = R['S'][j], R['DUR'][j]
+        for kind in (m.get('ambs') or '').split():
+            bed = amb_bed(kind, d + .9, seed=j + 1) * AMB_GAIN
+            st = int(max(0, s - .3) * SR)
+            e = min(n, st + len(bed))
+            L[st:e] += bed[:e - st]
+            Rr[st:e] += np.roll(bed, 240)[:e - st]
+            used.append(f'S{j}:{kind}')
+        events = []
+        for tok in (m.get('sfx') or '').split():
+            name, _, at = tok.partition('@')
+            events.append((name, float(at or 0)))
+        if auto and j > 0 and not any(e[1] < .6 for e in events):
+            if m['tr'] == 'glow':
+                events.append(('shimmer', 0.0))
+            elif m['tr'].startswith('wipe') or m['tr'] in ('zoom', 'iris'):
+                events.append(('whoosh', -0.15))
+        for name, at in events:
+            if name not in SFX:
+                print('  sunet necunoscut:', name)
+                continue
+            x = SFX[name]() * SFX_GAIN[name]
+            st = int(max(0, s + at) * SR)
+            e = min(n, st + len(x))
+            pan = .5 + .2 * math.sin(j * 1.7)
+            L[st:e] += x[:e - st] * (1.2 - pan)
+            Rr[st:e] += x[:e - st] * (.2 + pan)
+            used.append(f'S{j}:{name}@{at}')
+    write_wav(path, np.stack([L, Rr], 1))
+    print('  efecte:', ', '.join(used) if used else '(niciunul)')
+    return path
+
+
+# ---------------------------------------------------------------- mix
+VOICE_FX = ('highpass=f=75,equalizer=f=220:t=q:w=1.1:g=-2,equalizer=f=3300:t=q:w=1.3:g=2.2,'
+            'equalizer=f=9000:t=h:w=1:g=-1.5,deesser=i=0.35,'
+            'acompressor=threshold=0.09:ratio=2.6:attack=8:release=170:makeup=1.6')
+
+
+def build_voice_track(R, adir, path):
+    np = _np()
+    n = int((R['total'] + 1) * SR)
+    v = np.zeros(n)
+    for i, s in enumerate(R['S']):
+        f = f'{adir}/s{i:02d}.wav'
+        if not os.path.exists(f):
+            continue
+        x = read_wav(f)
+        off = voice_offset(i)
+        a, b = speech_span(x)
+        if off + b > R['DUR'][i] + .05:
+            print(f'  ATENȚIE: scena {i} are {R["DUR"][i]} s, vocea se termină la {off + b:.2f} s – rulează fit --write')
+        st = int((s + off) * SR)
+        e = min(n, st + len(x))
+        v[st:e] += x[:e - st]
+    return write_wav(path, v)
+
+
+def mix(page, out, adir, dest, sfx=True, voicefx=True):
+    R = reel_info(page)
+    total = R['total']
+    tmpd = f'{out}/_mix'
+    os.makedirs(tmpd, exist_ok=True)
+    voice = build_voice_track(R, adir, f'{tmpd}/voice.wav')
+    vf = VOICE_FX if voicefx else 'anull'
+    if sfx:
+        fx = build_fx_track(R, f'{tmpd}/fx.wav')
+        graph = (f'[1:a]{vf},asplit=2[v][vk];[2:a][vk]sidechaincompress=threshold=0.03:ratio=5:attack=20:release=400[fxd];'
+                 f'[v][fxd]amix=inputs=2:normalize=0:duration=first')
+        ins = ['-i', voice, '-i', fx]
+    else:
+        graph = f'[1:a]{vf}'
+        ins = ['-i', voice]
+    # 1) mixăm vocea prelucrată cu efectele, 2) măsurăm intensitatea, 3) o aducem la -14 LUFS cu limitator (vârf sub -1 dBFS după AAC)
+    pre = f'{tmpd}/premix.wav'
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error'] + ins + ['-filter_complex', graph.replace('[1:a]', '[0:a]').replace('[2:a]', '[1:a]') + f',atrim=0:{total}[a]',
+                    '-map', '[a]', '-ar', str(SR), '-ac', '2', '-c:a', 'pcm_s16le', pre], check=True)
+    r = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', pre, '-af', 'ebur128', '-f', 'null', '-'], capture_output=True, text=True).stderr
+    I = float(re.findall(r'I:\s+(-?[\d.]+) LUFS', r)[-1])
+    gain = -14.0 - I
+    fo = max(0, total - 0.9)
+    full = (f'[1:a]volume={gain:.2f}dB,alimiter=limit=0.8:attack=4:release=60:level=disabled,afade=t=out:st={fo}:d=0.9,aresample=48000[a];'
+            f'[0:v]fade=t=out:st={fo}:d=0.9[v]')
+    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', f'{out}/video_only.mp4', '-i', pre,
+                    '-filter_complex', full, '-map', '[v]', '-map', '[a]',
+                    '-c:v', 'libx264', '-preset', 'medium', '-tune', 'animation', '-crf', '17', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
+                    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+                    '-g', '60', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-movflags', '+faststart', dest], check=True)
+    print(f'  intensitate înainte {I:.1f} LUFS, câștig {gain:+.1f} dB')
+    shutil.rmtree(tmpd, ignore_errors=True)
+    print('final', dest)
+
+
+# ---------------------------------------------------------------- copertă, verificare
+def cover(page, dest, t=2.5):
+    from playwright.sync_api import sync_playwright
+    from PIL import Image
+    with sync_playwright() as p:
+        b, pg, R = open_page(p, page, 2)
+        pg.evaluate(f"renderAt({t})")
+        tmp = dest + '.png'
+        pg.screenshot(path=tmp)
+        b.close()
+    Image.open(tmp).convert('RGB').save(dest, quality=92)
+    os.remove(tmp)
+    print('copertă', dest)
+
+
+def check(video, out):
+    from PIL import Image
+    os.makedirs(out, exist_ok=True)
+    pr = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', video]))
+    v = [s for s in pr['streams'] if s['codec_type'] == 'video'][0]
+    a = [s for s in pr['streams'] if s['codec_type'] == 'audio']
+    dur = float(pr['format']['duration'])
+    print(f"video {v['width']}x{v['height']} {v['codec_name']} {v.get('pix_fmt')} {v.get('color_space', '?')} {eval(v['r_frame_rate']):.0f} fps, "
+          f"audio {a[0]['codec_name'] + ' ' + a[0]['sample_rate'] + ' Hz' if a else 'LIPSEȘTE'}, durata {dur:.1f} s")
+    if a:
+        r = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', video, '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture_output=True, text=True).stderr
+        I = re.findall(r'I:\s+(-?[\d.]+) LUFS', r)
+        P = re.findall(r'Peak:\s+(-?[\d.]+) dBFS', r)
+        print(f'intensitate {I[-1] if I else "?"} LUFS (țintă -14), vârf {P[-1] if P else "?"} dBFS')
+        s = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', video, '-af', 'silencedetect=n=-40dB:d=1.2', '-f', 'null', '-'], capture_output=True, text=True).stderr
+        sil = [(float(x), float(y)) for x, y in re.findall(r'silence_end: ([\d.]+) \| silence_duration: ([\d.]+)', s)]
+        inside = [(round(e - d, 1), round(d, 1)) for e, d in sil if e < dur - 0.5 and e - d > 0.5]
+        print('tăceri peste 1.2 s în episod:', inside if inside else 'niciuna')
+    ts = [dur * (i + .5) / 12 for i in range(12)]
+    ims = []
+    for i, t in enumerate(ts):
+        f = f'{out}/_c{i}.jpg'
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-ss', f'{t:.2f}', '-i', video, '-frames:v', '1', '-vf', 'scale=216:384', f], check=True)
+        ims.append(f)
+    W = Image.new('RGB', (216 * 6, 384 * 2))
+    for i, f in enumerate(ims):
+        W.paste(Image.open(f), ((i % 6) * 216, (i // 6) * 384))
+        os.remove(f)
+    W.save(f'{out}/check_sheet.jpg', quality=85)
+    print('cadre', f'{out}/check_sheet.jpg')
+
+
+def sfxdemo(out):
+    np = _np()
+    os.makedirs(out, exist_ok=True)
+    parts = []
+    for name in ['chime', 'shimmer', 'whoosh', 'bell', 'pop']:
+        parts += [SFX[name]() * .5, np.zeros(int(.5 * SR))]
+    for kind in ['birds', 'wind', 'night', 'fire', 'sea', 'bees', 'rain', 'church']:
+        parts += [amb_bed(kind, 4, 2) * .6, np.zeros(int(.4 * SR))]
+    write_wav(f'{out}/sfx_demo.wav', np.concatenate(parts))
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', f'{out}/sfx_demo.wav', '-c:a', 'aac', '-b:a', '160k', f'{out}/sfx_demo.m4a'], check=True)
+    print('mostre', f'{out}/sfx_demo.m4a', '(chime, shimmer, whoosh, bell, pop, apoi: birds, wind, night, fire, sea, bees, rain, church)')
+
+
+# ---------------------------------------------------------------- linia de comandă
+if __name__ == '__main__':
+    a = sys.argv[1:]
+    flags = {x for x in a if x.startswith('--')}
+    opt = {}
+    pos = []
+    i = 0
+    while i < len(a):
+        if a[i] in ('--fps', '--workers'):
+            opt[a[i]] = int(a[i + 1]); i += 2; continue
+        if not a[i].startswith('--'):
+            pos.append(a[i])
+        i += 1
+    m = pos[0] if pos else ''
+    if m == 'preview':
+        preview(pos[1], pos[2])
+    elif m == 'draft':
+        draft(pos[1], pos[2], pos[3] if len(pos) > 3 else None)
+    elif m == 'fit':
+        fit(pos[1], pos[2], pos[3] if len(pos) > 3 else '', write='--write' in flags)
+    elif m == 'render':
+        render(pos[1], pos[2], fps=opt.get('--fps', FPS), workers=opt.get('--workers', 2), resume='--resume' in flags)
+    elif m == 'mix':
+        mix(pos[1], pos[2], pos[3], pos[4], sfx='--no-sfx' not in flags, voicefx='--no-voicefx' not in flags)
+    elif m == 'cover':
+        cover(pos[1], pos[2], float(pos[3]) if len(pos) > 3 else 2.5)
+    elif m == 'check':
+        check(pos[1], pos[2])
+    elif m == 'sfxdemo':
+        sfxdemo(pos[1])
+    else:
+        print(__doc__)

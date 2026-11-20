@@ -1,0 +1,25 @@
+{
+ "v": 3,
+ "layout": "files",
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-19T10:09:12Z"
+ },
+ "title": "Istorioare cu tâlc – Stil canal",
+ "namespace": "Istorioare",
+ "libraries": [],
+ "sections": {},
+ "groups": [],
+ "assetGroups": {},
+ "blobs": {},
+ "docs": {
+  "readme": "project/README.md",
+  "sections": []
+ },
+ "lastChange": {
+  "by": "Claude",
+  "at": "2026-11-19T10:09:12Z",
+  "via": "Claude (chat)",
+  "note": "Creat din episodul de referință „Urechi mântuite”."
+ }
+}

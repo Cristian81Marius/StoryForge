@@ -1,0 +1,4 @@
+{
+ "ro": {"provider": "cartesia", "voice": "3f64ef99-d87b-4b51-b217-df7351f7886a", "name": "Andrei - Conversationalist Guy", "language": "ro", "aprobat": true},
+ "en": {"provider": null, "voice": null, "name": "de ales la primul episod în engleză (Speko voices_search language=en, voce caldă de povestitor)", "language": "en", "aprobat": false}
+}

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<title>Motor v2 – demonstrație</title>
+<link rel="stylesheet" href="engine-v2.css">
+</head>
+<body>
+<div id="stage">
+
+<!-- 0. Titlu -->
+<div class="scene" data-cam="push" data-amb="dust:18" data-sfx="shimmer@0.2">
+<svg viewBox="0 0 540 960">
+  <g class="bg" data-bg="noapte" data-moon="0"></g>
+  <g transform="translate(270,500)"><circle r="230" fill="url(#glow)" opacity=".35" class="a-pulse"/></g>
+  <g data-depth="1.15"><g class="ch" data-ch="proroc" data-x="270" data-y="830" data-s="1.5" data-do="fade 0.6-1.6 in"></g></g>
+  <text x="270" y="420" class="t-title shine letters" data-at=".2">Istorioare</text>
+  <text x="270" y="490" class="t-title shine letters" data-at=".7">cu tâlc</text>
+  <text x="270" y="548" class="t-sub" data-in="rise" data-at="1.3">demonstrație</text>
+  <text x="270" y="578" class="t-sub" data-in="rise" data-at="1.5">motorul de animație v2</text>
+</svg></div>
+
+<!-- 1. Satul -->
+<div class="scene" data-cam="pan-r" data-amb="dust:20" data-tr="fade" data-ambs="birds">
+<svg viewBox="0 0 540 960">
+  <g class="bg" data-bg="sat-zi"></g>
+  <g class="ch" data-ch="oaie" data-x="420" data-y="770" data-s="1.1" data-do="graze 0.5-3"></g>
+  <g class="ch" data-ch="miel" data-x="470" data-y="790" data-s="1.1" data-dir="-1" data-do="walk 1-3 > 440,800"></g>
+  <g class="ch" data-ch="proroc" data-x="40" data-y="880" data-s="1.65" data-do="walk 0-3.4 > 200,850; gest bless 3.6; talk 3.8-6; face smile 3.6; look 1 3.4"></g>
+  <g class="ch" data-ch="taranca" data-x="400" data-y="900" data-s="1.6" data-dir="-1" data-do="gest heart 3; face joy 4.2; look -1 1"></g>
+  <g class="ch" data-ch="copil" data-x="330" data-y="900" data-s="1.6" data-do="gest wave 1.2; face joy 1.2; jump 2.2"></g>
+</svg>
+<div class="cap">Prorocul a intrat în sat, iar oamenii <em>l-au primit cu bucurie</em>.</div>
+</div>
+
+<!-- 2. În casă: rugăciunea -->
+<div class="scene" data-cam="push-strong" data-focus="270,740" data-tr="dip" data-grade="warm" data-sfx="chime@2.2">
+<svg viewBox="0 0 540 960">
+  <g class="bg" data-bg="casa" data-time="noapte" data-table="0"></g>
+  <g class="ch" data-ch="taranca" data-pose="kneel" data-x="185" data-y="880" data-s="2.35"></g>
+  <g class="ch" data-ch="copil" data-pose="kneel" data-x="360" data-y="890" data-s="2.35"></g>
+  <g transform="translate(110,300)"><circle r="70" fill="url(#glow)" class="a-pulse" opacity=".6"/></g>
+</svg>
+<div class="cap">Seara, mama și copilul <em>s-au rugat în genunchi</em> în fața icoanei.</div>
+</div>
+
+<!-- 3. Cetatea -->
+<div class="scene" data-cam="pull" data-tr="wipe-right" data-amb="dust:14">
+<svg viewBox="0 0 540 960">
+  <g class="bg" data-bg="oras-vechi"></g>
+  <g class="ch" data-ch="ostas" data-x="430" data-y="860" data-s="1.6" data-dir="-1"></g>
+  <g class="ch" data-ch="rege" data-x="150" data-y="880" data-s="1.75" data-do="gest hips 0.3; face proud 0.3; talk 0.8-3; gest point 3.2; face stern 3.2; talk 3.4-5"></g>
+  <g class="ch" data-ch="caine" data-x="300" data-y="900" data-s="1.2" data-do="wag 0-6"></g>
+</svg>
+<div class="cap"><span class="d">— Eu sunt cel mai bogat om din cetate! a strigat regele.</span><span class="d">— Și cel mai sărac în <em>suflet</em>.</span></div>
+</div>
+
+<!-- 4. Raiul -->
+<div class="scene" data-cam="rise" data-tr="glow" data-amb="sparkle:14 dust:16" data-grade="holy" data-sfx="shimmer@0.3">
+<svg viewBox="0 0 540 960">
+  <g class="bg" data-bg="rai"></g>
+  <g class="ch" data-ch="inger" data-x="620" data-y="420" data-s="1.1" data-do="fly 0.2-3 > 380,820,1.55; gest open 2.8; talk 3.2-5.5"></g>
+  <g class="ch" data-ch="proroc" data-x="150" data-y="860" data-s="1.7" data-do="gest raise 1; face joy 1; look 1 0.5"></g>
+  <g class="ch" data-ch="porumbel" data-x="-40" data-y="500" data-s="1.4" data-olive="1" data-do="fly 0-4 > 560,380"></g>
+</svg>
+<div class="cap">Și îngerul i-a deschis <em>porțile de lumină</em>.</div>
+</div>
+
+<!-- 5. Versetul -->
+<div class="scene" data-cam="still" data-tr="dip" data-amb="dust:14">
+<svg viewBox="0 0 540 960">
+  <rect x="-40" y="-40" width="620" height="1040" fill="url(#skyVerse)"/>
+  <g class="stars" data-n="90"></g>
+  <g transform="translate(270,430)"><circle r="240" fill="url(#glow)" opacity=".18" class="a-pulse"/></g>
+  <text x="270" y="320" class="t-verse" data-in="rise" data-at=".3">„Fericiți cei ce ascultă</text>
+  <text x="270" y="362" class="t-verse" data-in="rise" data-at=".6">Cuvântul lui Dumnezeu</text>
+  <text x="270" y="404" class="t-verse" data-in="rise" data-at=".9">și-l păzesc!”</text>
+  <text x="270" y="452" class="t-ref" data-in="fade" data-at="1.4">Luca 11, 28</text>
+  <line x1="200" y1="520" x2="340" y2="520" stroke="#ffd36b" stroke-opacity=".6" stroke-width="1.5" data-in="draw" data-at="2"/>
+  <text x="270" y="570" class="t-credit" data-in="fade" data-at="2.4">din „600 de istorioare religioase”</text>
+  <text x="270" y="600" class="t-credit" data-in="fade" data-at="2.6">Pr. Iosif Trifa</text>
+</svg></div>
+
+</div>
+<script id="reel-config" type="application/json">{"DUR": [4.7, 4.31, 5.03, 6.03, 3.39, 9.37], "RATE": [1.0, 1.35, 1.19, 1.0, 1.35, 1.0], "VO": [[0.53, 3.67], [0.43, 3.08], [0.43, 3.8], [0.42, 4.81], [0.44, 2.15], [0.47, 7.1]], "DUR0": [4.5, 6.5, 6, 6, 6, 6]}</script>
+<script src="personaje-v2.js"></script>
+<script src="fundaluri-v2.js"></script>
+<script src="engine-v2.js"></script>
+</body>
+</html>
