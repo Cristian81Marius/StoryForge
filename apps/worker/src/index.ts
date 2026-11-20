@@ -5,8 +5,10 @@ import { makeLogger } from "@storyforge/core";
 import { appendJobLog, claimJob, requeueStale } from "@storyforge/core/services";
 import { HANDLERS } from "./handlers";
 import { spawnClaude, UsageLimitError } from "./runner";
+import { makeRecorder } from "./ctx";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+process.env.STORYFORGE_ROOT ??= repoRoot;
 const db = new PrismaClient();
 const workerId = process.env.WORKER_ID ?? "worker-1";
 const pollMs = Number(process.env.WORKER_POLL_MS ?? 5000);
@@ -33,7 +35,7 @@ export async function processOne(): Promise<boolean> {
   try {
     if (!handler) throw new Error(`Tip de job necunoscut: ${job.kind}`);
     jlog.info("job.start", { attempt: job.attempts });
-    await handler({ db, job, log: jlog, repoRoot, workDir, exec: spawnClaude(), mock });
+    await handler({ db, job, log: jlog, repoRoot, workDir, exec: spawnClaude(), mock, record: makeRecorder(db, job.id) });
     await db.job.update({ where: { id: job.id }, data: { status: "SUCCEEDED", finishedAt: new Date(), lockedBy: null, error: null } });
     jlog.info("job.ok");
   } catch (e) {

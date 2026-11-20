@@ -39,7 +39,10 @@ export default async function StoryPage({
   const compare = sp.cmp ? versions.find((v) => String(v.number) === sp.cmp) : undefined;
   const latest = versions.at(-1);
   const canDecide = isReview(status) && stage === currentStage && selected && latest && selected.id === latest.id && !latest.decision;
-  const files = (selected?.files ?? []) as FileRef[];
+  // fișierele din storage se servesc prin /api/files (paginile HTML din work/ rămân doar referințe)
+  const files = ((selected?.files ?? []) as FileRef[]).map((f) =>
+    f.kind === "page" ? f : { ...f, url: `/api/files/${f.key.split("/").map(encodeURIComponent).join("/")}` },
+  );
   const q = (o: Record<string, string | number | undefined>) =>
     "?" + Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join("&");
 
@@ -152,12 +155,17 @@ export default async function StoryPage({
             <div className="row">
               {files.map((f) =>
                 f.url && f.mime?.startsWith("video/") ? (
-                  <video key={f.key} src={f.url} controls style={{ maxHeight: 420 }} />
+                  <figure key={f.key} style={{ margin: 0 }}>
+                    <video src={f.url} controls preload="metadata" style={{ maxHeight: 480 }} data-testid={`video-${f.kind}-${f.lang}`} />
+                    <figcaption className="muted">{f.kind} {f.lang?.toUpperCase()}</figcaption>
+                  </figure>
                 ) : f.url && f.mime?.startsWith("audio/") ? (
                   <audio key={f.key} src={f.url} controls />
                 ) : f.url && f.mime?.startsWith("image/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={f.key} src={f.url} alt={f.kind} style={{ maxWidth: 360 }} />
+                  <a key={f.key} href={f.url} target="_blank" rel="noreferrer">
+                    <img src={f.url} alt={`${f.kind} ${f.lang ?? ""}`} style={{ maxWidth: 420, borderRadius: 6 }} />
+                  </a>
                 ) : (
                   <span key={f.key} className="badge">
                     {f.kind}

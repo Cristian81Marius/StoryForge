@@ -9,48 +9,15 @@ import { scenaristPrompt } from "./prompts";
 import { prepareEpisodeDir } from "./episode-dir";
 import { runComoriImport } from "./import-comori";
 
-export interface HandlerCtx {
-  db: PrismaClient;
-  job: Job;
-  log: Logger;
-  repoRoot: string;
-  workDir: string;
-  exec: Exec;
-  mock: boolean;
-}
+export type { HandlerCtx } from "./ctx";
+import type { HandlerCtx } from "./ctx";
+import { videoDraft, finalRender } from "./video";
 
 type JobInput = { previousVersionId?: string; feedback?: string; approvedVersionId?: string; versionId?: string };
 
 async function loadStory(ctx: HandlerCtx) {
   if (!ctx.job.storyId) throw new Error("Jobul nu are poveste");
   return ctx.db.story.findUniqueOrThrow({ where: { id: ctx.job.storyId }, include: { book: true } });
-}
-
-function recorder(ctx: HandlerCtx) {
-  return async (r: import("./runner").RunRecord) => {
-    await ctx.db.run.create({
-      data: {
-        jobId: ctx.job.id,
-        agent: r.agent,
-        model: r.model,
-        effort: r.effort,
-        attempt: r.attempt,
-        inputTokens: r.usage.inputTokens,
-        outputTokens: r.usage.outputTokens,
-        cacheReadTokens: r.usage.cacheReadTokens,
-        cacheCreationTokens: r.usage.cacheCreationTokens,
-        costUsd: r.usage.costUsd,
-        modelUsage: (r.usage.modelUsage ?? undefined) as object | undefined,
-        durationMs: Math.round(r.usage.durationMs),
-        durationApiMs: r.usage.durationApiMs ? Math.round(r.usage.durationApiMs) : null,
-        numTurns: r.usage.numTurns ?? null,
-        exitCode: r.exitCode,
-        sessionId: r.usage.sessionId,
-        outputValid: r.outputValid,
-        error: r.error?.slice(0, 4000),
-      },
-    });
-  };
 }
 
 /** Etapă simulată (faza 1): produce payload-ul mock și o înregistrare Run cu cost 0. */
@@ -109,7 +76,7 @@ async function scriptDraft(ctx: HandlerCtx) {
     schema: ScenaristOutput,
     cwd: ctx.repoRoot,
     exec: ctx.exec,
-    record: recorder(ctx),
+    record: ctx.record,
     log: ctx.log,
     allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "Skill", "Bash(python3:*)", "Bash(python:*)"],
   });
@@ -168,9 +135,9 @@ async function bookImportComori(ctx: HandlerCtx) {
 export const HANDLERS: Record<string, (ctx: HandlerCtx) => Promise<void>> = {
   "book.import.comori": bookImportComori,
   "script.draft": scriptDraft,
-  "video.draft": notYet("VIDEO", 3),
+  "video.draft": (ctx) => (ctx.mock ? mockStage(ctx, "VIDEO") : videoDraft(ctx)),
   "voice.draft": notYet("VOICE", 4),
-  "final.render": notYet("FINAL", 3),
+  "final.render": (ctx) => (ctx.mock ? mockStage(ctx, "FINAL") : finalRender(ctx)),
   "social.draft": notYet("SOCIAL", 5),
   "social.schedule": socialSchedule,
 };

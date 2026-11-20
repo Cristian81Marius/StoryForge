@@ -93,7 +93,7 @@ export function extractAgentJson(r: ClaudeResult): unknown {
 
 export type ValidateResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-export function validateAgentOutput<T>(schema: z.ZodType<T>, r: ClaudeResult): ValidateResult<T> {
+export function validateAgentOutput<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, r: ClaudeResult): ValidateResult<T> {
   let raw: unknown;
   try {
     raw = extractAgentJson(r);

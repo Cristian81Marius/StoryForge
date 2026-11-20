@@ -3,7 +3,34 @@
 Platformă web + worker pentru producția săptămânală de episoade animate scurte (RO + EN), pornind de la „600 de istorioare religioase” de Iosif Trifa. Episoadele se fac cu skill-ul Claude Code `istorioare-episod-v2`, rulat headless prin abonament (fără cheie API Anthropic).
 
 - **Arhitectura și analiza skill-ului:** [`docs/01-analiza-skill.md`](docs/01-analiza-skill.md)
-- **Stadiu:** fazele 1–2 (schema DB, state machine, UI de aprobare, worker headless, importul cărții, scenaristul real prin skill). Etapele VIDEO, VOICE, FINAL și SOCIAL rulează deocamdată doar în mod mock.
+- **Stadiu:** fazele 1–3 (schema DB, state machine, UI de aprobare, worker headless, importul cărții, scenaristul real prin skill). Etapele VOICE și SOCIAL rulează deocamdată doar în mod mock.
+
+## Video (faza 3)
+
+Workerul rulează comenzile motorului v2 exact ca în skill (`build_v2.py preview / draft / render / mix / check / cover`), din `work/ep-NNN/pipeline/`.
+
+- **VIDEO_DRAFT:** pentru RO și EN: preview (grila cu 2 cadre pe scenă) → agentul **producer** face QA vizual și repară pagina, fără să schimbe textele aprobate → preview refăcut → `draft.mp4` 540×960, fără voce. În review vezi grilele, draftul și problemele găsite.
+- **FINAL_RENDER:** randare 1080×1920 → mixaj (doar dacă vocea există, după faza 4) → **outro de brand** cu atribuirea obligatorie, lipit după cartela finală a skill-ului → `check` (rezoluție, codec, BT.709, -14 LUFS, vârf, tăceri) → copertă. În review vezi video-ul final, coperta și raportul de verificare.
+- **Outro-ul** e o pagină a aceluiași motor (aceleași fonturi și culori), generată din **Setări → Template video**: nume canal, slogan RO/EN, culoare, logo, durată. Nu am folosit Remotion: ar fi adăugat sute de MB de dependențe pentru câteva secunde de video.
+- **Storage:** `STORAGE_DRIVER=local` (implicit, în `STORAGE_DIR`) sau `s3` (S3/R2/MinIO). Fișierele se servesc doar adminului, prin `/api/files/...`, cu suport de derulare.
+
+### Cerințe pentru randare (pe calculatorul cu workerul)
+
+```bash
+pip install playwright pillow numpy
+```
+
+```bash
+python -m playwright install chromium
+```
+
+Plus `ffmpeg` și `ffprobe` în PATH. Verificare rapidă (randează un outro de test):
+
+```bash
+npm run test -w @storyforge/worker
+```
+
+**Windows, de verificat la prima rulare:** `build_v2.py` deschide paginile cu `'file://' + cale` și caută Chrome doar în căi Linux, deci pe Windows folosește Chromium-ul Playwright. Dacă testul de randare pică pe Windows, trimite-mi eroarea. Motorul nu se modifică în repo, corecția se face în artifactul motorului v2, cum prevede skill-ul.
 
 ## Importul cărții (faza 2)
 

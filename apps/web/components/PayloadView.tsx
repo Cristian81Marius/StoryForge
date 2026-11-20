@@ -82,6 +82,85 @@ export function PayloadView({ stage, payload }: { stage: Stage; payload: unknown
       );
     }
   }
+  if (stage === "VIDEO") {
+    const p = payload as { qa?: Record<string, { issues?: Array<{ sceneId: string; kind: string; description: string; fixed: boolean }>; notes?: string }>; note?: string };
+    if (p?.qa)
+      return (
+        <div data-testid="qa-view">
+          {p.note && <p className="muted">{p.note}</p>}
+          {Object.entries(p.qa).map(([lang, q]) => (
+            <div key={lang}>
+              <h3>QA producer ({lang.toUpperCase()})</h3>
+              {!q.issues?.length ? (
+                <p className="muted">Nicio problemă găsită.</p>
+              ) : (
+                <ul>
+                  {q.issues.map((i, k) => (
+                    <li key={k}>
+                      <b>{i.sceneId}</b> · {i.kind} · {i.description} {i.fixed ? <span className="badge ok">reparat</span> : <span className="badge bad">nereparat</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {q.notes && <p className="muted">{q.notes}</p>}
+            </div>
+          ))}
+        </div>
+      );
+  }
+  if (stage === "FINAL") {
+    const p = payload as {
+      check?: Record<string, { width: number; height: number; codec: string; colorSpace: string; fps: number; durationSec: number; audio: string | null; lufs: number | null; peakDbfs: number | null; silences: string }>;
+      warnings?: string[];
+    };
+    if (p?.check) {
+      const ok = (c: NonNullable<typeof p.check>[string]) =>
+        c.width === 1080 && c.height === 1920 && c.codec === "h264" && !!c.audio && c.lufs !== null && Math.abs(c.lufs + 14) <= 1 && (c.peakDbfs ?? 0) <= -1;
+      return (
+        <div data-testid="check-view">
+          {p.warnings?.map((w, i) => (
+            <p key={i} className="msg err">
+              {w}
+            </p>
+          ))}
+          <table>
+            <thead>
+              <tr>
+                <th>Limbă</th>
+                <th>Rezoluție</th>
+                <th>Codec / culori</th>
+                <th>Durată</th>
+                <th>Audio</th>
+                <th>LUFS (−14 ±1)</th>
+                <th>Vârf (≤ −1 dBFS)</th>
+                <th>Tăceri &gt; 1,2 s</th>
+                <th>Conform skill</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(p.check).map(([lang, c]) => (
+                <tr key={lang}>
+                  <td>{lang.toUpperCase()}</td>
+                  <td>
+                    {c.width}×{c.height} @ {c.fps} fps
+                  </td>
+                  <td>
+                    {c.codec} / {c.colorSpace}
+                  </td>
+                  <td>{c.durationSec.toFixed(1)} s</td>
+                  <td>{c.audio ?? "lipsește"}</td>
+                  <td>{c.lufs ?? "—"}</td>
+                  <td>{c.peakDbfs ?? "—"}</td>
+                  <td>{c.silences}</td>
+                  <td>{ok(c) ? <span className="badge ok">da</span> : <span className="badge bad">nu</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+  }
   if (stage === "SOCIAL") {
     const r = SocialOutput.safeParse(payload);
     if (r.success)

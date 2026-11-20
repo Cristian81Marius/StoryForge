@@ -74,7 +74,7 @@ export interface RunAgentInput<T> {
   model?: string;
   effort?: string;
   prompt: string;
-  schema: z.ZodType<T>;
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>;
   cwd: string;
   exec: Exec;
   record: (r: RunRecord) => Promise<void>;
