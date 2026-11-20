@@ -1,0 +1,4 @@
+# Skill-ul și motorul v2 sunt copii exacte (verificate prin hash): fără conversie de capete de linie
+# la checkout pe Windows (core.autocrlf), altfel hash-urile nu se mai potrivesc.
+.claude/skills/** -text
+vendor/** -text

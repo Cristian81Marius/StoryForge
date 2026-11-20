@@ -17,7 +17,7 @@
     "test": "npm run test -w @storyforge/core && npm run test -w @storyforge/worker",
     "test:e2e": "npm run test:e2e -w @storyforge/web",
     "typecheck": "tsc -p packages/core && tsc -p apps/worker && tsc -p apps/web --noEmit",
-    "skill:verify": "tsx scripts/verify-skill.mts",
+    "skill:verify": "tsx --env-file-if-exists=.env scripts/verify-skill.mts",
     "demo": "tsx --env-file-if-exists=.env scripts/demo-phase1.mts",
     "import:comori": "tsx --env-file-if-exists=.env scripts/import-comori.mts",
     "render:check": "tsx --env-file-if-exists=.env scripts/render-final-check.mts",
