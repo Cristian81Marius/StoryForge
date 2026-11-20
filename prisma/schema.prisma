@@ -80,6 +80,34 @@ model Book {
   sourceFileKey     String?
   createdAt         DateTime @default(now())
   stories           Story[]
+  imports           BookImport[]
+}
+
+enum ImportStatus {
+  FETCHING // descărcare în curs (worker)
+  PREVIEW // așteaptă verificarea și confirmarea manuală
+  CONFIRMED
+  DISCARDED
+  FAILED
+}
+
+/// Un import al cărții, cu previzualizare. Poveștile se creează DOAR la confirmare.
+model BookImport {
+  id          String       @id @default(cuid())
+  bookId      String
+  book        Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  /// "comori-od" | "upload:txt" | "upload:docx" | "upload:pdf"
+  source      String
+  fileName    String?
+  status      ImportStatus @default(PREVIEW)
+  /// ImportedStory[] (număr, titlu, text, avertismente, skip)
+  items       Json         @default("[]")
+  /// ImportReport + preambulul ignorat
+  report      Json         @default("{}")
+  progress    Int          @default(0)
+  error       String?
+  createdAt   DateTime     @default(now())
+  confirmedAt DateTime?
 }
 
 model Story {

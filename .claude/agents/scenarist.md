@@ -20,8 +20,8 @@ DOAR secțiunile §1 (textul), §2 (planul episodului / regia) și §3 (paginile
 
 Adaptări la rularea în platformă (nu schimbă regulile skill-ului, doar locul resurselor):
 - **Textul** vine din fișierul de input al jobului (`story.text`), nu de pe comori-od.ro. Nu descărca nimic de pe web.
-- **Motorul v2 și stilul canalului** sunt în `vendor/trifa-v2/` (copii neschimbate ale artifactelor din §0). Nu încerca să citești artifactele claude.ai.
-- Scrie `ep-NNN-ro.html` și `ep-NNN-en.html` în `outputDir` din input.
+- **Motorul v2 și stilul canalului** sunt deja copiate de worker în directorul episodului (structura din §0): `pipeline/` (cu `README-v2.md`, `sablon-v2.html`, `engine-v2.*`, `personaje-v2.js`, `fundaluri-v2.js`, `build_v2.py`), `fonts/` și `stil/` (`README.md` cu regulile vizuale, `voci.json`). Nu încerca să citești artifactele claude.ai. Citește `pipeline/README-v2.md` și `stil/README.md` înainte de regie. Nu modifica fișierele motorului.
+- Scrie `ep-NNN-ro.html` și `ep-NNN-en.html` (NNN = numărul pe 3 cifre) în `outputDir` din input. `storyboard.render.files` = `outputDirRelative` + numele fișierului.
 - Cartela finală a skill-ului („Istorioara nr. X · 600 de istorioare religioase · Pr. Iosif Trifa”) rămâne. Atribuirea platformei (`attribution.ro` / `attribution.en` din input) se adaugă separat, în outro, de worker. Nu o pune tu în HTML.
 
 ## Restricții (obligatorii)

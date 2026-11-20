@@ -50,7 +50,7 @@ test.describe("flux de aprobare", () => {
     await expect(awaiting.getByRole("link", { name: "[MOCK] Istorioara de test 1", exact: true })).toBeVisible();
     await expect(awaiting.locator("[data-status=SOCIAL_REVIEW]")).toHaveCount(1);
     await expect(page.getByTestId("failed-jobs")).toContainText("Output JSON invalid");
-    await expect(page.getByTestId("queue").locator("tr[data-story]")).toHaveCount(6);
+    await expect(page.getByTestId("queue").locator("tr[data-story]")).toHaveCount(6); // seed: 6 povești NEW
   });
 
   test("Cere modificări: comentariul e obligatoriu; apoi re-rulare cu feedback → v2", async ({ page }) => {

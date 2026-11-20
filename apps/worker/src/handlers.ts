@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Job, PrismaClient } from "@prisma/client";
 import { mockPayload, renderAttribution, ScenaristOutput, STAGE_DEF, type Logger, type Stage } from "@storyforge/core";
@@ -6,6 +6,8 @@ import { saveDraftVersion } from "@storyforge/core/services";
 import { runAgent, type Exec } from "./runner";
 import { loadAgentMeta } from "./agents";
 import { scenaristPrompt } from "./prompts";
+import { prepareEpisodeDir } from "./episode-dir";
+import { runComoriImport } from "./import-comori";
 
 export interface HandlerCtx {
   db: PrismaClient;
@@ -75,9 +77,8 @@ async function scriptDraft(ctx: HandlerCtx) {
   const input = ctx.job.input as JobInput;
   const previous = input.previousVersionId ? await ctx.db.version.findUnique({ where: { id: input.previousVersionId } }) : null;
 
-  const dir = resolve(ctx.workDir, `ep-${String(story.number).padStart(3, "0")}`);
-  mkdirSync(dir, { recursive: true });
-  const inputPath = resolve(dir, `input-${ctx.job.id}.json`);
+  const ep = prepareEpisodeDir(ctx.repoRoot, ctx.workDir, story.number);
+  const inputPath = resolve(ep.dir, `input-${ctx.job.id}.json`);
   const attr = { author: story.book.author, number: story.number, title: story.title, book: story.book.title };
   writeFileSync(
     inputPath,
@@ -88,7 +89,11 @@ async function scriptDraft(ctx: HandlerCtx) {
         attribution: { ro: renderAttribution({ template: story.book.attributionRo, ...attr }), en: renderAttribution({ template: story.book.attributionEn, ...attr }) },
         previousVersion: previous ? { number: previous.number, payload: previous.payload } : null,
         feedback: input.feedback ?? null,
-        outputDir: dir,
+        /** Paginile ep-NNN-ro.html / ep-NNN-en.html se scriu AICI, lângă motor (căile relative din șablon). */
+        outputDir: ep.pipeline,
+        outputDirRelative: ep.rel(ep.pipeline),
+        styleDir: ep.rel(ep.stil),
+        engineReadme: ep.rel(resolve(ep.pipeline, "README-v2.md")),
       },
       null,
       2,
@@ -100,7 +105,7 @@ async function scriptDraft(ctx: HandlerCtx) {
     agent: "scenarist",
     model: meta.model,
     effort: meta.effort,
-    prompt: scenaristPrompt({ inputPath, workDir: dir, storyNumber: story.number, hasFeedback: !!input.feedback }),
+    prompt: scenaristPrompt({ inputPath: ep.rel(inputPath), workDir: ep.rel(ep.dir), storyNumber: story.number, hasFeedback: !!input.feedback }),
     schema: ScenaristOutput,
     cwd: ctx.repoRoot,
     exec: ctx.exec,
@@ -111,12 +116,19 @@ async function scriptDraft(ctx: HandlerCtx) {
 
   // Trasabilitate: storyboard-ul trebuie să indice istorioara corectă.
   if (out.storyboard.source.storyNumber !== story.number) throw new Error(`Storyboard pentru nr. ${out.storyboard.source.storyNumber}, așteptat ${story.number}`);
+  // Paginile HTML declarate trebuie să existe (output-ul §3 al skill-ului).
+  const files = (["ro", "en"] as const).map((lang) => {
+    const rel = out.storyboard.render.files[lang];
+    if (!rel || !existsSync(resolve(ctx.repoRoot, rel))) throw new Error(`Pagina ${lang} lipsește: ${rel ?? "(nedeclarată)"}`);
+    return { key: rel, kind: "page", lang, mime: "text/html" };
+  });
 
   await saveDraftVersion(ctx.db, {
     storyId: story.id,
     stage: "SCRIPT",
     jobId: ctx.job.id,
     payload: out,
+    files,
     inputFeedback: input.feedback ?? null,
     parentVersionId: input.previousVersionId ?? null,
   });
@@ -143,7 +155,18 @@ async function socialSchedule(ctx: HandlerCtx) {
   ctx.log.info("social.mock_scheduled", { count: day - 1 });
 }
 
+async function bookImportComori(ctx: HandlerCtx) {
+  const { importId, limit } = ctx.job.input as { importId: string; limit?: number };
+  try {
+    await runComoriImport({ db: ctx.db, importId, cacheDir: resolve(ctx.workDir, "cache/comori"), log: ctx.log, limit });
+  } catch (e) {
+    await ctx.db.bookImport.update({ where: { id: importId }, data: { status: "FAILED", error: (e as Error).message } });
+    throw e;
+  }
+}
+
 export const HANDLERS: Record<string, (ctx: HandlerCtx) => Promise<void>> = {
+  "book.import.comori": bookImportComori,
   "script.draft": scriptDraft,
   "video.draft": notYet("VIDEO", 3),
   "voice.draft": notYet("VOICE", 4),

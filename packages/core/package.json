@@ -8,13 +8,17 @@
   "exports": {
     ".": "./src/index.ts",
     "./services": "./src/services/index.ts",
-    "./db": "./src/db.ts"
+    "./db": "./src/db.ts",
+    "./import": "./src/import/index.ts",
+    "./import-files": "./src/import/files.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "mammoth": "1.13.0",
+    "unpdf": "1.9.1",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.24.6"
   },

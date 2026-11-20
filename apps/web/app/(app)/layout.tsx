@@ -13,6 +13,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Link className="item" href="/">
           Dashboard
         </Link>
+        <Link className="item" href="/import">
+          Import
+        </Link>
         <Link className="item" href="/calendar">
           Calendar
         </Link>

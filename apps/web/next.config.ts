@@ -7,7 +7,8 @@ loadEnvConfig(path.resolve(__dirname, "../.."));
 
 const config: NextConfig = {
   transpilePackages: ["@storyforge/core"],
-  serverExternalPackages: ["@prisma/client"],
+  serverExternalPackages: ["@prisma/client", "mammoth", "unpdf"],
+  experimental: { serverActions: { bodySizeLimit: "32mb" } },
   outputFileTracingRoot: path.resolve(__dirname, "../.."),
   poweredByHeader: false,
 };

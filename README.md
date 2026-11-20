@@ -3,7 +3,21 @@
 Platformă web + worker pentru producția săptămânală de episoade animate scurte (RO + EN), pornind de la „600 de istorioare religioase” de Iosif Trifa. Episoadele se fac cu skill-ul Claude Code `istorioare-episod-v2`, rulat headless prin abonament (fără cheie API Anthropic).
 
 - **Arhitectura și analiza skill-ului:** [`docs/01-analiza-skill.md`](docs/01-analiza-skill.md)
-- **Stadiu:** faza 1 (schema DB, state machine, UI de aprobare cu date mock, worker cu runner headless). Etapele VIDEO, VOICE, FINAL și SOCIAL rulează deocamdată doar în mod mock.
+- **Stadiu:** fazele 1–2 (schema DB, state machine, UI de aprobare, worker headless, importul cărții, scenaristul real prin skill). Etapele VIDEO, VOICE, FINAL și SOCIAL rulează deocamdată doar în mod mock.
+
+## Importul cărții (faza 2)
+
+Pagina **Import** din aplicație. Se importă DOAR textul istorioarelor; prefața, notele, ilustrațiile și adăugirile editoriale nu se folosesc. Nimic nu intră în coadă fără confirmarea ta, după previzualizare.
+
+- **Din fișier** (TXT, DOCX, PDF): fiecare istorioară începe cu un rând „Număr. Titlu”. Textul dinaintea primei istorioare (prefața) e ignorat și afișat separat.
+- **De pe comori-od.ro** (sursa folosită și de skill): jobul `book.import.comori` din worker descarcă secvențial, cu pauze și reîncercări (site-ul răspunde cu HTTP 500 la prea multe cereri). Paginile rămân în `work/cache/comori/`, așa că o reluare descarcă doar ce lipsește. De pe site se iau doar rândurile textului, inclusiv trimiterile autorului de tip „(Mt 7, 24)”. Nu se iau versetele adăugate de site, tag-urile sau prefețele.
+- **Din linia de comandă:** `npm run import:comori` (opțional `-- --limit 20`).
+
+Previzualizarea arată numerele lipsă, duplicatele, textele goale sau suspecte (posibile note și prefețe) și permite excluderea fiecărei istorioare. Dacă există probleme, confirmarea cere bifa „confirm oricum”. Poveștile deja intrate în producție nu sunt modificate de un import nou.
+
+După demo, butonul „Șterge datele demo” din pagina Import elimină poveștile `[MOCK]`.
+
+Dacă rețeaua ta trece printr-un proxy HTTP, pornește workerul cu `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21), ca `fetch` să folosească `HTTPS_PROXY`.
 
 ## Structură
 
